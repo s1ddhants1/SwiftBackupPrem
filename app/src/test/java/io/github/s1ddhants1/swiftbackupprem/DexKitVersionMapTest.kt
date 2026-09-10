@@ -40,5 +40,6 @@ class DexKitVersionMapTest {
         assertEquals("defpackage.c64", v620.homeViewModel)
         assertEquals("defpackage.d45", v620.authUser)
         assertEquals("defpackage.b45", v620.anonUser)
+        assertEquals("defpackage.gg3", v620.firebaseWatcher)
     }
 }

@@ -102,4 +102,17 @@ class LocalCloudUnlockHookTest {
         assertEquals("CPH2573", jsonMatcher.group(3))
         assertEquals("20260908-194213-IR", jsonMatcher.group(4))
     }
+
+    @Test
+    fun testResolvedTargetsIncludesFirebaseWatcherClass() {
+        val targets = ResolvedTargets(firebaseWatcherClass = String::class.java)
+        assertNotNull(targets.firebaseWatcherClass)
+        assertEquals(String::class.java, targets.firebaseWatcherClass)
+    }
+
+    @Test
+    fun testShouldSkipIsAnonymousSpoofNormalCaller() {
+        // In this test runner, the stack trace does not contain intro or the dummy watcher class
+        assertFalse(LocalCloudUnlockHook.shouldSkipIsAnonymousSpoof("com.dummy.WatcherClass"))
+    }
 }

@@ -46,6 +46,7 @@ object LocalCloudUnlockHook : HookHandler {
     ) {
         Log.d(TAG, "[LocalCloudUnlock] Applying LocalCloudUnlockHook (unlockLocalCloudFeatures=${prefs.unlockLocalCloudFeatures})")
         hookIsAnonymous(module, classLoader, targets, prefs)
+        hookFirebaseWatcher(module, classLoader, targets, prefs)
         hookAppCloudBackups(module, context, classLoader, targets, prefs)
         hookFireSynchronizer(module, context, classLoader, targets, prefs)
         hookDatabaseReferenceWrites(module, context, classLoader, targets, prefs)
@@ -58,6 +59,7 @@ object LocalCloudUnlockHook : HookHandler {
         targets: ResolvedTargets,
         prefs: PreferencesManager
     ) {
+        val watcherClassName = targets.firebaseWatcherClass?.name
         // 1. Standard FirebaseUser public SDK class or Swift Backup's MFirebaseUser
         val fbUserClasses = listOfNotNull(
             loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.anonymous.MFirebaseUser"),
@@ -70,6 +72,9 @@ object LocalCloudUnlockHook : HookHandler {
                 if (m != null) {
                     module.hookTracked(m, idPrefix = "local-cloud-${userCls.simpleName}-is-anonymous").intercept { chain ->
                         if (prefs.unlockLocalCloudFeatures) {
+                            if (!prefs.customFirebaseApp && shouldSkipIsAnonymousSpoof(watcherClassName)) {
+                                return@intercept chain.proceed()
+                            }
                             Log.d(TAG, "[LocalCloudUnlock] Intercepted ${userCls.simpleName}.isAnonymous -> false")
                             return@intercept false
                         }
@@ -88,6 +93,9 @@ object LocalCloudUnlockHook : HookHandler {
                 if (m != null) {
                     module.hookTracked(m, idPrefix = "local-cloud-user-${userClass.simpleName}-is-anonymous").intercept { chain ->
                         if (prefs.unlockLocalCloudFeatures) {
+                            if (!prefs.customFirebaseApp && shouldSkipIsAnonymousSpoof(watcherClassName)) {
+                                return@intercept chain.proceed()
+                            }
                             Log.d(TAG, "[LocalCloudUnlock] Intercepted ${userClass.name}.isAnonymous -> false")
                             return@intercept false
                         }
@@ -95,6 +103,73 @@ object LocalCloudUnlockHook : HookHandler {
                     }
                     Log.d(TAG, "[LocalCloudUnlock] Hooked ${userClass.name}.isAnonymous")
                 }
+            }
+        }
+    }
+
+    fun shouldSkipIsAnonymousSpoof(watcherClassName: String?): Boolean {
+        return try {
+            val stack = Thread.currentThread().stackTrace
+            for (i in 2 until minOf(stack.size, 15)) {
+                val cls = stack[i].className
+                if (cls.contains("org.swiftapps.swiftbackup.intro") || (watcherClassName != null && cls == watcherClassName)) {
+                    return true
+                }
+            }
+            false
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    fun hookFirebaseWatcher(
+        module: XposedModule,
+        classLoader: ClassLoader,
+        targets: ResolvedTargets,
+        prefs: PreferencesManager
+    ) {
+        val watcherClass = targets.firebaseWatcherClass
+            ?: loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.common.FirebaseConnectionWatcher")
+            ?: return
+
+        attempt("hook FirebaseConnectionWatcher isApplicable") {
+            val isApplicableMethod = watcherClass.declaredMethods.firstOrNull { m ->
+                Modifier.isStatic(m.modifiers) &&
+                    m.parameterCount == 0 &&
+                    (m.returnType == Boolean::class.javaPrimitiveType || m.returnType == Boolean::class.javaObjectType)
+            }
+            if (isApplicableMethod != null) {
+                module.hookTracked(
+                    isApplicableMethod,
+                    idPrefix = "local-cloud-fcw-is-applicable",
+                    deoptimize = true
+                ).intercept { chain ->
+                    if (prefs.unlockLocalCloudFeatures && !prefs.customFirebaseApp) {
+                        Log.d(TAG, "[LocalCloudUnlock] Intercepted ${watcherClass.simpleName}.${isApplicableMethod.name}() -> false (suppressing backend checks for local account)")
+                        return@intercept false
+                    }
+                    chain.proceed()
+                }
+                Log.i(TAG, "[LocalCloudUnlock] Hooked ${watcherClass.name}.${isApplicableMethod.name} (FirebaseWatcher isApplicable)")
+            }
+        }
+
+        attempt("hook FirebaseConnectionWatcher dialog creators") {
+            watcherClass.declaredMethods.filter { m ->
+                Modifier.isStatic(m.modifiers) && android.app.Dialog::class.java.isAssignableFrom(m.returnType)
+            }.forEach { m ->
+                module.hookTracked(
+                    m,
+                    idPrefix = "local-cloud-fcw-dialog-${m.name}",
+                    deoptimize = true
+                ).intercept { chain ->
+                    if (prefs.unlockLocalCloudFeatures && !prefs.customFirebaseApp) {
+                        Log.d(TAG, "[LocalCloudUnlock] Intercepted ${watcherClass.simpleName}.${m.name}() dialog -> null")
+                        return@intercept null
+                    }
+                    chain.proceed()
+                }
+                Log.i(TAG, "[LocalCloudUnlock] Hooked dialog creator ${watcherClass.name}.${m.name}")
             }
         }
     }
