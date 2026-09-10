@@ -168,11 +168,18 @@ object BackupCrypto {
         val uids = LinkedHashSet<String>()
         uids.add(BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID)
 
-        // 1. Obfuscated user singleton in Swift Backup process
-        for (className in listOf("d45", "b45")) {
-            attempt("resolve UID via $className", silent = true) {
-                val user = loadClassFlexible(classLoader, className)?.getDeclaredMethod("a")?.invoke(null)
-                val uid = user?.javaClass?.getDeclaredMethod("getUid")?.invoke(user) as? String
+        // 1. Resolved user classes from targets
+        targets?.authUserClass?.let { cls ->
+            attempt("resolve UID via authUserClass", silent = true) {
+                val user = cls.declaredMethods.firstOrNull { it.parameterCount == 0 && java.lang.reflect.Modifier.isStatic(it.modifiers) }?.invoke(null)
+                val uid = user?.javaClass?.getMethod("getUid")?.invoke(user) as? String
+                if (!uid.isNullOrBlank()) uids.add(uid)
+            }
+        }
+        targets?.anonUserClass?.let { cls ->
+            attempt("resolve UID via anonUserClass", silent = true) {
+                val user = cls.declaredMethods.firstOrNull { it.parameterCount == 0 && java.lang.reflect.Modifier.isStatic(it.modifiers) }?.invoke(null)
+                val uid = user?.javaClass?.getMethod("getUid")?.invoke(user) as? String
                 if (!uid.isNullOrBlank()) uids.add(uid)
             }
         }

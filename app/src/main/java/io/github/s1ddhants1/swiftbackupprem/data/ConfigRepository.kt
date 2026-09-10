@@ -66,6 +66,7 @@ class ConfigRepositoryImpl(
             "enableSnapshotInjection",
             "enableBackupRebuilder",
             "syncMetadataToFirebase",
+            "unlockLocalCloudFeatures",
             "customFirebaseApp",
             "googleAppId",
             "googleApiKey",
@@ -112,7 +113,8 @@ class ConfigRepositoryImpl(
             },
             enableSnapshotInjection = if (rawJson.has("enableSnapshotInjection")) rawJson.optBoolean("enableSnapshotInjection", decoded.enableSnapshotInjection) else decoded.enableSnapshotInjection,
             enableBackupRebuilder = if (rawJson.has("enableBackupRebuilder")) rawJson.optBoolean("enableBackupRebuilder", decoded.enableBackupRebuilder) else decoded.enableBackupRebuilder,
-            syncMetadataToFirebase = if (rawJson.has("syncMetadataToFirebase")) rawJson.optBoolean("syncMetadataToFirebase", decoded.syncMetadataToFirebase) else decoded.syncMetadataToFirebase
+            syncMetadataToFirebase = if (rawJson.has("syncMetadataToFirebase")) rawJson.optBoolean("syncMetadataToFirebase", decoded.syncMetadataToFirebase) else decoded.syncMetadataToFirebase,
+            unlockLocalCloudFeatures = if (rawJson.has("unlockLocalCloudFeatures")) rawJson.optBoolean("unlockLocalCloudFeatures", decoded.unlockLocalCloudFeatures) else decoded.unlockLocalCloudFeatures
         )
 
         prefs.applyConfig(finalConfig)

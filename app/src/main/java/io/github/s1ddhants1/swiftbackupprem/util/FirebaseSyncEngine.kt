@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import android.util.Log
 import io.github.s1ddhants1.swiftbackupprem.Consts
+import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudScannerRegistry
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
@@ -662,4 +663,53 @@ object FirebaseSyncEngine {
             put("stability", json.optInt("stability", 0))
         }
     }
+
+    /**
+     * Pushes app backup metadata directly to configured cloud providers (WebDAV, Nextcloud, S3, etc.)
+     * without writing to Firebase RTDB.
+     */
+    fun syncAppMetadataToCloudProviders(
+        context: Context,
+        pkgName: String,
+        backupId: String,
+        metadataJson: JSONObject,
+        uid: String = BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID
+    ): Boolean = attempt("sync $pkgName ($backupId) metadata to cloud storage providers", silent = true) {
+        val tag = metadataJson.optString("backupTag").takeIf { it.isNotBlank() && it != "DEFAULT" }
+            ?: run {
+                val sp = context.getSharedPreferences("org.swiftapps.swiftbackup_preferences", Context.MODE_PRIVATE)
+                val connectedCloud = sp.getString("connected_cloud_type", null)
+                (if (connectedCloud != null) sp.getString("${connectedCloud}_cloud_backup_tag", null) else null)
+                    ?: sp.getString("google_drive_cloud_backup_tag", null)
+                    ?: sp.getString("cloud_backup_tag", null)
+                    ?: "DEFAULT"
+            }
+        metadataJson.put("backupTag", tag)
+
+        val accountHash = BackupMigratorEngine.computeAccountHash(uid)
+
+        // 1. Direct index record JSON for instant cloud discovery without reconstruction
+        val rawJson = metadataJson.toString(2)
+        val metaPath = "$pkgName.meta ($tag) (id-$backupId)"
+        val jsonPath = "$pkgName.json ($tag) (id-$backupId)"
+        val structuredJsonPath = "SwiftBackup/accounts/$accountHash/backups/apps/local/$pkgName/$backupId/$pkgName.json"
+
+        CloudScannerRegistry.uploadTextToActiveProviders(context, metaPath, rawJson)
+        CloudScannerRegistry.uploadTextToActiveProviders(context, jsonPath, rawJson)
+        CloudScannerRegistry.uploadTextToActiveProviders(context, structuredJsonPath, rawJson)
+
+        // 2. Encrypted XML metadata for parity and multi-device migration
+        val key = BackupCrypto.deriveConcealKey(uid)
+        val encUid = BackupCrypto.concealEncrypt(uid, key)
+        val encMeta = BackupCrypto.concealEncrypt(metadataJson.toString(), key)
+        val xmlContent = "v1:::$encUid:::$encMeta"
+
+        val path1 = "SwiftBackup/accounts/$accountHash/backups/apps/local/$pkgName/$backupId/$pkgName.xml"
+        val path2 = "$pkgName.xml ($tag) (id-$backupId)"
+
+        CloudScannerRegistry.uploadTextToActiveProviders(context, path1, xmlContent)
+        CloudScannerRegistry.uploadTextToActiveProviders(context, path2, xmlContent)
+
+        true
+    } ?: false
 }

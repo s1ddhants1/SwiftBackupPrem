@@ -12,7 +12,7 @@ import kotlin.reflect.KProperty
 
 @Stable
 class PreferencesManager(
-    private val prefs: SharedPreferences?,
+    private val prefs: SharedPreferences? = null,
     private val isDynamic: Boolean = false,
     private val backupPrefs: SharedPreferences? = null
 ) {
@@ -72,6 +72,7 @@ class PreferencesManager(
     var enableSnapshotInjection by booleanPreference("enable_snapshot_injection", false)
     var enableBackupRebuilder by booleanPreference("enable_backup_rebuilder", false)
     var syncMetadataToFirebase by booleanPreference("sync_metadata_to_firebase", false)
+    var unlockLocalCloudFeatures by booleanPreference("unlock_local_cloud_features", false)
     var customFirebaseApp by booleanPreference("custom_firebase_app")
 
     fun toConfig(): SbpConfig = SbpConfig(
@@ -82,6 +83,7 @@ class PreferencesManager(
         enableSnapshotInjection = enableSnapshotInjection,
         enableBackupRebuilder = enableBackupRebuilder,
         syncMetadataToFirebase = syncMetadataToFirebase,
+        unlockLocalCloudFeatures = unlockLocalCloudFeatures,
         customFirebaseApp = customFirebaseApp,
         googleAppId = googleAppId,
         googleApiKey = googleApiKey,
@@ -95,12 +97,14 @@ class PreferencesManager(
     fun applyConfig(config: SbpConfig) {
         enablePremium = config.enablePremium
         disableTelemetry = config.disableTelemetry
+        unlockLocalCloudFeatures = config.unlockLocalCloudFeatures
         customFirebaseApp = config.customFirebaseApp
-        enableCloudDiscovery = if (config.customFirebaseApp) config.enableCloudDiscovery else false
+        val canUseCloud = config.customFirebaseApp || config.unlockLocalCloudFeatures
+        enableCloudDiscovery = if (canUseCloud) config.enableCloudDiscovery else false
         enableGoogleDriveScope = if (config.customFirebaseApp) config.enableGoogleDriveScope else false
-        enableSnapshotInjection = if (config.customFirebaseApp && config.enableCloudDiscovery) config.enableSnapshotInjection else false
-        enableBackupRebuilder = if (config.customFirebaseApp) config.enableBackupRebuilder else false
-        syncMetadataToFirebase = if (config.customFirebaseApp) config.syncMetadataToFirebase else false
+        enableSnapshotInjection = if (canUseCloud && config.enableCloudDiscovery) config.enableSnapshotInjection else false
+        enableBackupRebuilder = if (canUseCloud) config.enableBackupRebuilder else false
+        syncMetadataToFirebase = if (canUseCloud) config.syncMetadataToFirebase else false
         googleAppId = config.googleAppId
         googleApiKey = config.googleApiKey
         firebaseDatabaseUrl = config.firebaseDatabaseUrl

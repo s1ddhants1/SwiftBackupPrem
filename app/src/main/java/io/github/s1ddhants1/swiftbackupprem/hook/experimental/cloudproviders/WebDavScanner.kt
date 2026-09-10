@@ -269,4 +269,49 @@ object WebDavScanner : CloudScanner {
             conn.disconnect()
         }
     }
+
+    override fun uploadFileText(
+        context: Context,
+        prefs: SharedPreferences,
+        remoteRelativePath: String,
+        content: String
+    ): Boolean = attempt("WebDAV PUT text", silent = true) {
+        val baseUrl = resolveWebDavUrl(prefs) ?: return@attempt false
+        val authHeader = resolveAuthHeader(prefs)
+        val normalizedBase = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val cleanPath = remoteRelativePath.trimStart('/')
+        val targetUrl = "$normalizedBase$cleanPath"
+
+        val conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "PUT"
+            doOutput = true
+            connectTimeout = 15000
+            readTimeout = 15000
+            if (!authHeader.isNullOrBlank()) {
+                setRequestProperty("Authorization", authHeader)
+            }
+            setRequestProperty("Content-Type", "application/xml; charset=UTF-8")
+        }
+        try {
+            conn.outputStream.use { os ->
+                os.write(content.toByteArray(StandardCharsets.UTF_8))
+                os.flush()
+            }
+            val code = conn.responseCode
+            Log.d(TAG, "[WebDavScanner] HTTP PUT to $cleanPath returned $code")
+            code in 200..299 || code == 201 || code == 204
+        } finally {
+            conn.disconnect()
+        }
+    } ?: false
+
+    override fun uploadFile(
+        context: Context,
+        prefs: SharedPreferences,
+        remoteRelativePath: String,
+        file: java.io.File
+    ): Boolean = attempt("WebDAV PUT file", silent = true) {
+        if (!file.exists() || !file.canRead()) return@attempt false
+        uploadFileText(context, prefs, remoteRelativePath, file.readText(StandardCharsets.UTF_8))
+    } ?: false
 }

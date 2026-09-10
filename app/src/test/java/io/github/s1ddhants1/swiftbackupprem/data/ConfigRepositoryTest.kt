@@ -151,6 +151,27 @@ class ConfigRepositoryTest {
         assertFalse(result.enableSnapshotInjection)
         assertFalse(result.enableBackupRebuilder)
         assertFalse(result.syncMetadataToFirebase)
+        assertFalse(result.unlockLocalCloudFeatures)
+    }
+
+    @Test
+    fun parseConfigParsesUnlockLocalCloudFeatures() {
+        val prefs = PreferencesManager(null)
+        val json = """
+            {
+              "enablePremium": true,
+              "disableTelemetry": true,
+              "unlockLocalCloudFeatures": true,
+              "enableCloudDiscovery": true
+            }
+        """.trimIndent()
+
+        val result = repository.parseConfig(json, prefs)
+
+        assertTrue(result.unlockLocalCloudFeatures)
+        assertTrue(result.enableCloudDiscovery)
+        assertTrue(prefs.unlockLocalCloudFeatures)
+        assertTrue(prefs.enableCloudDiscovery)
     }
 
     @Test(expected = IllegalArgumentException::class)

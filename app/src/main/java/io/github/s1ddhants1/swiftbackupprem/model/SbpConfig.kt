@@ -11,6 +11,7 @@ data class SbpConfig(
     val enableSnapshotInjection: Boolean = false,
     val enableBackupRebuilder: Boolean = false,
     val syncMetadataToFirebase: Boolean = false,
+    val unlockLocalCloudFeatures: Boolean = false,
     val customFirebaseApp: Boolean = false,
     val googleAppId: String = "",
     val googleApiKey: String = "",

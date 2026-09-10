@@ -12,6 +12,7 @@ import android.widget.ImageView
 import androidx.annotation.Keep
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
+import io.github.s1ddhants1.swiftbackupprem.hook.hookTracked
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.hook.HookHandler
 import io.github.s1ddhants1.swiftbackupprem.hook.ResolvedTargets
@@ -19,7 +20,6 @@ import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.Clo
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudScanner
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudScannerRegistry
 import io.github.s1ddhants1.swiftbackupprem.hook.getFieldValue
-import io.github.s1ddhants1.swiftbackupprem.hook.hookTracked
 import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
@@ -270,30 +270,78 @@ object CloudDiscoveryHook : HookHandler {
 
         companion object {
             fun fromJson(pkg: String, obj: JSONObject): DiscoveredCloudApp {
-                fun s(k: String) = obj.optString(k, "").ifBlank { null }
-                fun l(k: String) = obj.optLong(k, 0L)
+                fun s(vararg keys: String): String? {
+                    for (k in keys) {
+                        val v = obj.optString(k, "").trim()
+                        if (v.isNotBlank() && v != "null") return v
+                    }
+                    return null
+                }
+                fun l(vararg keys: String): Long {
+                    for (k in keys) {
+                        if (obj.has(k)) {
+                            val v = obj.optLong(k, -1L)
+                            if (v != -1L) return v
+                        }
+                    }
+                    return 0L
+                }
+                val resolvedPkg = s("packageName", "pkgName", "pName") ?: pkg
+                val resolvedSanitized = s("sanitizedAppId", "appId") ?: resolvedPkg.replace(".", "")
+                val resolvedBackupId = s("backupId", "id") ?: ""
+                val resolvedTag = s("backupTag", "tag") ?: "DEFAULT"
+                val resolvedAppName = s("appName", "name")
+                val resolvedApkLink = s("apkLink")
+                val resolvedApkSize = l("apkSize")
+                val resolvedApkDate = l("apkBackupDate")
+                val resolvedDataLink = s("dataLink")
+                val resolvedDataSize = l("dataSize")
+                val resolvedDataDate = l("dataBackupDate")
+                val resolvedExtDataLink = s("extDataLink")
+                val resolvedExtDataSize = l("extDataSize")
+                val resolvedExtDataDate = l("extDataBackupDate")
+                val resolvedSplitsLink = s("splitsLink")
+                val resolvedSplitsSize = l("splitsSize")
+                val resolvedSplitsDate = l("splitsBackupDate")
+                val resolvedExtraLink = s("extraLink", "specialDataLink")
+                val resolvedExtraSize = l("extraSize", "specialDataSize")
+                val resolvedTotalSize = l("totalSize")
+                val resolvedSsaid = s("ssaid")
+                val resolvedPerms = s("permissionStatesCsv")
+                val resolvedNotif = s("notificationPolicyXml")
+                val resolvedVerCode = l("versionCode").takeIf { it > 0 } ?: 1L
+                val resolvedVerName = s("versionName") ?: "1.0"
+                val resolvedDateBackup = l("dateBackup", "dateBackupUpdated").takeIf { it > 0 } ?: System.currentTimeMillis()
+                val resolvedProvider = s("provider") ?: "Generic"
+
                 return DiscoveredCloudApp(
-                    packageName = obj.optString("packageName", pkg),
-                    sanitizedAppId = obj.optString("sanitizedAppId", pkg.replace(".", "")),
-                    backupId = obj.optString("backupId", ""),
-                    backupTag = obj.optString("backupTag", "DEFAULT"),
-                    appName = s("appName"),
-                    apkLink = s("apkLink"), apkSize = l("apkSize"),
-                    apkBackupDate = l("apkBackupDate"),
-                    dataLink = s("dataLink"), dataSize = l("dataSize"),
-                    dataBackupDate = l("dataBackupDate"),
-                    extDataLink = s("extDataLink"), extDataSize = l("extDataSize"),
-                    extDataBackupDate = l("extDataBackupDate"),
-                    splitsLink = s("splitsLink"), splitsSize = l("splitsSize"),
-                    splitsBackupDate = l("splitsBackupDate"),
-                    extraLink = s("extraLink"), extraSize = l("extraSize"),
-                    totalSize = l("totalSize"), ssaid = s("ssaid"),
-                    permissionStatesCsv = s("permissionStatesCsv"),
-                    notificationPolicyXml = s("notificationPolicyXml"),
-                    versionCode = obj.optLong("versionCode", 1L),
-                    versionName = obj.optString("versionName", "1.0"),
-                    dateBackup = obj.optLong("dateBackup", System.currentTimeMillis()),
-                    provider = obj.optString("provider", "Generic")
+                    packageName = resolvedPkg,
+                    sanitizedAppId = resolvedSanitized,
+                    backupId = resolvedBackupId,
+                    backupTag = resolvedTag,
+                    appName = resolvedAppName,
+                    apkLink = resolvedApkLink,
+                    apkSize = resolvedApkSize,
+                    apkBackupDate = resolvedApkDate,
+                    dataLink = resolvedDataLink,
+                    dataSize = resolvedDataSize,
+                    dataBackupDate = resolvedDataDate,
+                    extDataLink = resolvedExtDataLink,
+                    extDataSize = resolvedExtDataSize,
+                    extDataBackupDate = resolvedExtDataDate,
+                    splitsLink = resolvedSplitsLink,
+                    splitsSize = resolvedSplitsSize,
+                    splitsBackupDate = resolvedSplitsDate,
+                    extraLink = resolvedExtraLink,
+                    extraSize = resolvedExtraSize,
+                    totalSize = resolvedTotalSize,
+                    ssaid = resolvedSsaid,
+                    permissionStatesCsv = resolvedPerms,
+                    notificationPolicyXml = resolvedNotif,
+                    versionCode = resolvedVerCode,
+                    versionName = resolvedVerName,
+                    dateBackup = resolvedDateBackup,
+                    provider = resolvedProvider
                 )
             }
         }
@@ -307,7 +355,7 @@ object CloudDiscoveryHook : HookHandler {
      * When passed to the native onDataChange pipeline, Swift Backup's own
      * AppCloudBackups.fromSnapshot() decodes it identically to a real RTDB entry.
      */
-    internal object FirebaseSnapshotSynthesizer {
+    object FirebaseSnapshotSynthesizer {
 
         private const val SYNTH_TAG = "$TAG-Synth"
 
@@ -318,42 +366,183 @@ object CloudDiscoveryHook : HookHandler {
             val dataSnapshot: Class<*>
         )
 
+        @Volatile
+        private var cachedClasses: FirebaseClasses? = null
+
         private fun resolveFirebaseClasses(classLoader: ClassLoader): FirebaseClasses? {
-            val nodeUtils = listOf(
-                "com.google.firebase.database.snapshot.NodeUtilities",
-                "com.google.firebase.database.snapshot.NodeUtility",
-                "xh8"
-            ).firstNotNullOfOrNull { loadClassFlexible(classLoader, it) } ?: run {
-                Log.d(SYNTH_TAG, "NodeUtilities class not found")
-                return null
-            }
+            cachedClasses?.let { return it }
 
-            val node = listOf(
-                "com.google.firebase.database.snapshot.Node",
-                "qn5"
-            ).firstNotNullOfOrNull { loadClassFlexible(classLoader, it) } ?: run {
-                Log.d(SYNTH_TAG, "Node class not found")
-                return null
-            }
-
-            val indexedNode = listOf(
-                "com.google.firebase.database.snapshot.IndexedNode",
-                "sb4"
-            ).firstNotNullOfOrNull { loadClassFlexible(classLoader, it) } ?: run {
-                Log.d(SYNTH_TAG, "IndexedNode class not found")
-                return null
-            }
-
-            val dataSnapshot = listOf(
-                "com.google.firebase.database.DataSnapshot",
-                "eb2"
-            ).firstNotNullOfOrNull { loadClassFlexible(classLoader, it) } ?: run {
+            // 1. DataSnapshot: public SDK class or resolved via AppCloudBackups.Companion.fromSnapshot parameter type
+            val dataSnapshot = listOfNotNull(
+                loadClassFlexible(classLoader, "com.google.firebase.database.DataSnapshot"),
+                attempt("resolve DataSnapshot via AppCloudBackups.fromSnapshot", silent = true) {
+                    val companionClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups\$a")
+                        ?: loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups\$Companion")
+                    val fromSnapshotMethod = companionClass?.declaredMethods?.firstOrNull { it.name == "fromSnapshot" }
+                    fromSnapshotMethod?.parameterTypes?.firstOrNull()
+                }
+            ).firstOrNull() ?: run {
                 Log.d(SYNTH_TAG, "DataSnapshot class not found")
                 return null
             }
 
-            return FirebaseClasses(nodeUtils, indexedNode, node, dataSnapshot)
+            // 2. IndexedNode: 2nd parameter of DataSnapshot constructor (DataSnapshot(DatabaseReference, IndexedNode))
+            val dsCtor = dataSnapshot.constructors.firstOrNull { it.parameterCount == 2 }
+            val indexedNode = listOfNotNull(
+                loadClassFlexible(classLoader, "com.google.firebase.database.snapshot.IndexedNode"),
+                dsCtor?.parameterTypes?.getOrNull(1)
+            ).firstOrNull() ?: run {
+                Log.d(SYNTH_TAG, "IndexedNode class not found")
+                return null
+            }
+
+            // 3. Node: single parameter of IndexedNode.from(Node) or return type of getNode()
+            val node = listOfNotNull(
+                loadClassFlexible(classLoader, "com.google.firebase.database.snapshot.Node"),
+                indexedNode.declaredMethods.firstOrNull { it.parameterCount == 1 && it.returnType == indexedNode }?.parameterTypes?.firstOrNull(),
+                indexedNode.declaredMethods.firstOrNull { it.name == "getNode" }?.returnType,
+                indexedNode.declaredFields.firstOrNull { it.type.isInterface }?.type
+            ).firstOrNull() ?: run {
+                Log.d(SYNTH_TAG, "Node class not found")
+                return null
+            }
+
+            // 4. NodeUtilities: public SDK class, dynamic reflection, or DEX scanner
+            val nodeUtils = listOfNotNull(
+                loadClassFlexible(classLoader, "com.google.firebase.database.snapshot.NodeUtilities"),
+                loadClassFlexible(classLoader, "com.google.firebase.database.snapshot.NodeUtility"),
+                attempt("find NodeUtilities dynamically", silent = true) {
+                    val candidates = (indexedNode.declaredClasses + node.declaredClasses).toMutableList()
+                    candidates.firstOrNull { cls ->
+                        cls.declaredMethods.any { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.returnType == node && it.parameterCount in 1..2 }
+                    }
+                },
+                findNodeUtilsInDex(classLoader, node)
+            ).firstOrNull() ?: run {
+                Log.d(SYNTH_TAG, "NodeUtilities class not found")
+                return null
+            }
+
+            val resolved = FirebaseClasses(nodeUtils, indexedNode, node, dataSnapshot)
+            cachedClasses = resolved
+            return resolved
         }
+
+        private fun findNodeUtilsInDex(classLoader: ClassLoader, nodeClass: Class<*>): Class<*>? =
+            attempt("find NodeUtilities via dex scan", silent = true) {
+                val nodeTypeDesc = "L${nodeClass.name.replace('.', '/')};"
+                val apkPaths = mutableSetOf<String>()
+
+                appContext?.applicationInfo?.sourceDir?.let { apkPaths.add(it) }
+
+                attempt("get APKs from ClassLoader", silent = true) {
+                    var cl: ClassLoader? = classLoader
+                    while (cl != null) {
+                        val pathListField = cl.javaClass.declaredFields.firstOrNull { it.name == "pathList" }
+                            ?: cl.javaClass.superclass?.declaredFields?.firstOrNull { it.name == "pathList" }
+                        if (pathListField != null) {
+                            pathListField.isAccessible = true
+                            val pathList = pathListField.get(cl)
+                            if (pathList != null) {
+                                val dexElementsField = pathList.javaClass.declaredFields.firstOrNull { it.name == "dexElements" }
+                                dexElementsField?.isAccessible = true
+                                val dexElements = dexElementsField?.get(pathList) as? Array<*>
+                                if (dexElements != null) {
+                                    for (element in dexElements) {
+                                        if (element == null) continue
+                                        val fileField = element.javaClass.declaredFields.firstOrNull { it.type == java.io.File::class.java }
+                                        fileField?.isAccessible = true
+                                        val file = fileField?.get(element) as? java.io.File
+                                        if (file != null && file.exists() && file.extension == "apk") {
+                                            apkPaths.add(file.absolutePath)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        cl = cl.parent
+                    }
+                }
+
+                for (apkPath in apkPaths) {
+                    val className = scanApkForNodeMethod(apkPath, nodeTypeDesc)
+                    if (!className.isNullOrBlank()) {
+                        val loaded = loadClassFlexible(classLoader, className)
+                        if (loaded != null) {
+                            Log.d(SYNTH_TAG, "Discovered NodeUtilities class: ${loaded.name}")
+                            return@attempt loaded
+                        }
+                    }
+                }
+                null
+            }
+
+        internal fun scanApkForNodeMethod(apkPath: String, nodeTypeDesc: String): String? =
+            attempt("scan APK for Node method", silent = true) {
+                val file = java.io.File(apkPath)
+                if (!file.exists()) return@attempt null
+                java.util.zip.ZipFile(file).use { zip ->
+                    val entries = zip.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (entry.name.endsWith(".dex")) {
+                            val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                            val foundClass = parseDexForNodeMethod(bytes, nodeTypeDesc)
+                            if (foundClass != null) {
+                                return@attempt foundClass
+                            }
+                        }
+                    }
+                }
+                null
+            }
+
+        internal fun parseDexForNodeMethod(dex: ByteArray, nodeTypeDesc: String): String? =
+            attempt("parse DEX for Node method", silent = true) {
+                val buffer = java.nio.ByteBuffer.wrap(dex).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                val stringIdsOff = buffer.getInt(0x3C)
+                val typeIdsOff = buffer.getInt(0x44)
+                val protoIdsOff = buffer.getInt(0x4C)
+                val methodIdsSize = buffer.getInt(0x58)
+                val methodIdsOff = buffer.getInt(0x5C)
+
+                fun getString(idx: Int): String {
+                    val off = buffer.getInt(stringIdsOff + idx * 4)
+                    var pos = off
+                    while ((dex[pos].toInt() and 0x80) != 0) pos++
+                    pos++
+                    val start = pos
+                    while (dex[pos].toInt() != 0) pos++
+                    return String(dex, start, pos - start, java.nio.charset.StandardCharsets.UTF_8)
+                }
+
+                fun getType(idx: Int): String {
+                    val strIdx = buffer.getInt(typeIdsOff + idx * 4)
+                    return getString(strIdx)
+                }
+
+                for (i in 0 until methodIdsSize) {
+                    val mOff = methodIdsOff + i * 8
+                    val classIdx = buffer.getShort(mOff).toInt() and 0xFFFF
+                    val protoIdx = buffer.getShort(mOff + 2).toInt() and 0xFFFF
+                    val pOff = protoIdsOff + protoIdx * 12
+                    val returnTypeIdx = buffer.getInt(pOff + 4)
+                    if (getType(returnTypeIdx) == nodeTypeDesc) {
+                        val paramsOff = buffer.getInt(pOff + 8)
+                        if (paramsOff != 0) {
+                            val paramCount = buffer.getInt(paramsOff)
+                            if (paramCount in 1..2) {
+                                val firstParamTypeIdx = buffer.getShort(paramsOff + 4).toInt() and 0xFFFF
+                                if (getType(firstParamTypeIdx) == "Ljava/lang/Object;") {
+                                    val rawClass = getType(classIdx)
+                                    return@attempt rawClass.trimStart('L').trimEnd(';').replace('/', '.')
+                                }
+                            }
+                        }
+                    }
+                }
+                null
+            }
 
         fun extractQueryRef(snapshot: Any): Any? =
             snapshot.getFieldValue("query")
@@ -361,8 +550,8 @@ object CloudDiscoveryHook : HookHandler {
                 ?: snapshot.getFieldValue("a")
                 ?: attempt("find query field by non-Node type", silent = true) {
                     snapshot.javaClass.declaredFields.firstOrNull {
-                        val typeName = it.type.name
-                        !typeName.contains("sb4") && !typeName.contains("IndexedNode") && !typeName.contains("qn5") && !typeName.contains("Node")
+                        val type = it.type
+                        !type.isPrimitive && type != String::class.java && !type.name.contains("Node")
                     }?.apply { isAccessible = true }?.get(snapshot)
                 }
 
@@ -475,8 +664,7 @@ object CloudDiscoveryHook : HookHandler {
                 .firstOrNull { c ->
                     val p0 = c.parameterTypes[0]
                     val p1 = c.parameterTypes[1]
-                    (p0.isAssignableFrom(queryRef.javaClass) || p0.name.contains("Query") || p0.name.contains("zc2")) &&
-                    (p1.isAssignableFrom(indexedNodeObj.javaClass) || p1.name.contains("IndexedNode") || p1.name.contains("sb4"))
+                    p0.isAssignableFrom(queryRef.javaClass) && p1.isAssignableFrom(indexedNodeObj.javaClass)
                 } ?: fb.dataSnapshot.constructors.firstOrNull { it.parameterCount == 2 }
 
             if (ctor == null) {
@@ -488,7 +676,16 @@ object CloudDiscoveryHook : HookHandler {
                 return@attempt null
             }
 
-            ctor.newInstance(queryRef, indexedNodeObj)
+            val p0 = ctor.parameterTypes[0]
+            val resolvedQueryRef = if (p0.isAssignableFrom(queryRef.javaClass)) {
+                queryRef
+            } else {
+                queryRef.javaClass.methods.firstOrNull { it.parameterCount == 0 && p0.isAssignableFrom(it.returnType) }?.invoke(queryRef)
+                    ?: queryRef.javaClass.declaredFields.firstOrNull { p0.isAssignableFrom(it.type) }?.apply { isAccessible = true }?.get(queryRef)
+                    ?: queryRef
+            }
+
+            ctor.newInstance(resolvedQueryRef, indexedNodeObj)
         }
 
         /**
@@ -595,73 +792,8 @@ object CloudDiscoveryHook : HookHandler {
         }
     }
 
-    /**
-     * Resilient factory for constructing pg1 (Drive file item) instances.
-     *
-     * Instead of hardcoding field names (c, e, f), discovers fields by type
-     * from the pg1 class. This survives obfuscation renames as long as the
-     * field types remain stable (Long for size/timestamp, String for links).
-     */
-    private class DriveFileItemFactory(classLoader: ClassLoader) {
-        val pg1Class: Class<*>? = loadClassFlexible(classLoader, "pg1") ?: loadClassFlexible(classLoader, "defpackage.pg1")
-        val ui1Class: Class<*>? = loadClassFlexible(classLoader, "ui1") ?: loadClassFlexible(classLoader, "defpackage.ui1")
-        private val pg1Ctor = pg1Class?.constructors?.firstOrNull {
-            it.parameterCount == 2 && it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
-        }
-
-        private val longFields = pg1Class?.declaredFields
-            ?.filter { it.type == Long::class.javaPrimitiveType || it.type == Long::class.javaObjectType }
-            ?.sortedBy { it.name }
-            ?.onEach { it.isAccessible = true }
-            ?: emptyList()
-
-        private val extraStringFields = pg1Class?.declaredFields
-            ?.filter { it.type == String::class.java }
-            ?.sortedBy { it.name }
-            ?.drop(2)
-            ?.onEach { it.isAccessible = true }
-            ?: emptyList()
-
-        private val sizeField = longFields.getOrNull(0)
-        private val timestampField = longFields.getOrNull(1)
-        private val thumbnailField = extraStringFields.getOrNull(0)
-
-        val isAvailable: Boolean = pg1Class != null && ui1Class != null && pg1Ctor != null
-
-        fun create(
-            fileName: String,
-            fileId: String,
-            size: Long = 0L,
-            timestamp: Long = 0L,
-            thumbnailLink: String? = null
-        ): Any? = attempt("create drive file item", silent = true) {
-            val item = pg1Ctor?.newInstance(fileName, fileId) ?: return@attempt null
-            if (size > 0L) sizeField?.set(item, size)
-            if (timestamp > 0L) timestampField?.set(item, timestamp)
-            if (!thumbnailLink.isNullOrBlank()) thumbnailField?.set(item, thumbnailLink)
-            item
-        }
-
-        fun wrapInResult(items: List<Any>): Any? = attempt("wrap in ui1 result", silent = true) {
-            ui1Class?.getConstructor(Exception::class.java, List::class.java)
-                ?.newInstance(null, items)
-        }
-
-        fun extractExistingItems(result: Any?): List<Any> =
-            attempt("extract items from result", silent = true) {
-                val listField = result?.javaClass?.declaredFields
-                    ?.firstOrNull { List::class.java.isAssignableFrom(it.type) }
-                listField?.apply { isAccessible = true }?.get(result) as? List<*>
-            }?.filterNotNull() ?: emptyList()
-
-        fun extractFileId(item: Any): String? = attempt("get fileId from item", silent = true) {
-            val bField = item.javaClass.getDeclaredField("b").apply { isAccessible = true }
-            (bField.get(item) as? String) ?: run {
-                val aField = item.javaClass.getDeclaredField("a").apply { isAccessible = true }
-                aField.get(item) as? String
-            }
-        }
-    }
+    @Volatile
+    var appContext: Context? = null
 
     @Volatile
     private var preferences: PreferencesManager? = null
@@ -673,36 +805,30 @@ object CloudDiscoveryHook : HookHandler {
         targets: ResolvedTargets,
         prefs: PreferencesManager
     ) {
+        appContext = context.applicationContext ?: context
         preferences = prefs
-        if (!prefs.customFirebaseApp || !prefs.enableCloudDiscovery) {
-            Log.d(TAG, "Cloud Discovery is disabled (requires custom Firebase app and Cloud Discovery enabled)")
+        val canDiscover = (prefs.customFirebaseApp || prefs.unlockLocalCloudFeatures) && prefs.enableCloudDiscovery
+        if (!canDiscover) {
+            Log.d(TAG, "Cloud Discovery is disabled (requires custom Firebase app or local cloud unlock, and Cloud Discovery enabled)")
             return
         }
 
         Log.d(TAG, "Applying CloudDiscoveryHook (Universal Cloud discovery & full-app cloud metadata indexing)")
         loadDiskCache(context)
-        val driveFileItemFactory = DriveFileItemFactory(classLoader)
         hookAppCloudBackups(module, context, classLoader, targets)
-        hookDetailCloudListener(module, context, classLoader, targets)
-        hookBatchCloudLoader(module, context, classLoader, targets)
-        hookAppFilterHelper(module, context, classLoader, targets)
-        hookCloudSyncTab(module, context, classLoader, targets)
-        hookCloudBackupTags(module, classLoader)
-        hookFolderCloudLoader(module, context, classLoader, targets)
-        hookFolderDetailCloudListener(module, context, classLoader, targets)
-        hookWallpaperCloudLoader(module, classLoader, driveFileItemFactory)
-        hookWifiCloudLoader(module, classLoader, driveFileItemFactory)
         startCloudScanWithRetry(context, classLoader, targets)
     }
 
     private fun isCloudDiscoveryEnabled(): Boolean {
         val p = preferences ?: return false
-        return p.customFirebaseApp && p.enableCloudDiscovery
+        if (p.unlockLocalCloudFeatures) return true
+        return (p.customFirebaseApp || p.unlockLocalCloudFeatures) && p.enableCloudDiscovery
     }
 
     private fun isSnapshotInjectionEnabled(): Boolean {
         val p = preferences ?: return false
-        return p.customFirebaseApp && p.enableCloudDiscovery && p.enableSnapshotInjection
+        if (p.unlockLocalCloudFeatures) return true
+        return (p.customFirebaseApp || p.unlockLocalCloudFeatures) && p.enableCloudDiscovery && p.enableSnapshotInjection
     }
 
     fun startDriveScanWithRetry(context: Context, classLoader: ClassLoader, targets: ResolvedTargets) =
@@ -749,6 +875,9 @@ object CloudDiscoveryHook : HookHandler {
     }
 
     fun ensureScan(context: Context, classLoader: ClassLoader, targets: ResolvedTargets, force: Boolean = false) {
+        if (appContext == null) {
+            appContext = context.applicationContext ?: context
+        }
         val isStale = System.currentTimeMillis() - lastScanTime > SCAN_CACHE_TTL_MS
         if (discoveredBackups.isEmpty() || isStale || force) {
             startCloudScanWithRetry(context, classLoader, targets)
@@ -776,6 +905,14 @@ object CloudDiscoveryHook : HookHandler {
 
     private fun createBackupsObject(cloudBackup: Any, classLoader: ClassLoader): Any? =
         createBackupsObject(listOf(cloudBackup), classLoader)
+
+    fun buildAppCloudBackupsObject(apps: List<DiscoveredCloudApp>, classLoader: ClassLoader): Any? =
+        attempt("build AppCloudBackups object", silent = true) {
+            val appCloudBackupsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups") ?: return null
+            val appBackupsCtor = appCloudBackupsClass.getConstructor(List::class.java)
+            val cloudBackups = apps.mapNotNull { buildAppCloudBackup(it, classLoader) }
+            appBackupsCtor.newInstance(cloudBackups)
+        }
 
     private fun getCanonicalCacheFile(): File {
         val dir = File(Environment.getExternalStorageDirectory(), "SwiftBackup")
@@ -921,24 +1058,21 @@ object CloudDiscoveryHook : HookHandler {
                 "fromSnapshot" -> attempt("hook fromSnapshot", silent = true) {
                     module.hookTracked(m, idPrefix = "cloud-discovery-app-backups-fromSnapshot").intercept { chain ->
                         val initialResult = chain.proceed()
-                        if (!isSnapshotInjectionEnabled() || initialResult != null) return@intercept initialResult
+                        if (!isSnapshotInjectionEnabled()) return@intercept initialResult
+                        if (initialResult != null && !isResultEmpty(initialResult)) return@intercept initialResult
 
                         ensureScan(context, classLoader, targets)
-                        val key = chain.args.firstOrNull()?.let { arg ->
-                            attempt("read snapshot key", silent = true) {
-                                val zc2Obj = arg.getFieldValue("b")
-                                zc2Obj?.javaClass?.getDeclaredMethod("e")?.invoke(zc2Obj) as? String
-                            }
-                        }
+                        val key = extractSnapshotKey(chain.args.firstOrNull())
 
                         if (key != null) {
                             val matchingList = findMatchingBackups(key)
                             val cloudBackups = matchingList.mapNotNull { buildAppCloudBackup(it, classLoader) }
                             if (cloudBackups.isNotEmpty()) {
+                                Log.i(TAG, "[CloudDiscovery] fromSnapshot injected ${cloudBackups.size} cloud backups for key=$key")
                                 return@intercept createBackupsObject(cloudBackups, classLoader)
                             }
                         }
-                        null
+                        initialResult
                     }
                 }
                 "fetchForPackage" -> attempt("hook fetchForPackage", silent = true) {
@@ -952,624 +1086,14 @@ object CloudDiscoveryHook : HookHandler {
                             val cloudBackups = matchingList.mapNotNull { buildAppCloudBackup(it, classLoader) }
                             if (cloudBackups.isNotEmpty()) {
                                 val backupsObj = createBackupsObject(cloudBackups, classLoader)
-                                val wc2Class = loadClassFlexible(classLoader, "wc2") ?: loadClassFlexible(classLoader, "defpackage.wc2")
-                                val resultCtor = if (wc2Class != null) {
-                                    m.returnType.getConstructor(appCloudBackupsClass, wc2Class)
-                                } else {
-                                    m.returnType.constructors.firstOrNull { it.parameterCount == 2 && it.parameterTypes[0] == appCloudBackupsClass }
-                                }
+                                val resultCtor = m.returnType.constructors.firstOrNull { it.parameterCount == 2 && it.parameterTypes[0] == appCloudBackupsClass }
+                                    ?: m.returnType.constructors.firstOrNull { it.parameterCount == 2 }
                                 resultCtor?.newInstance(backupsObj, null)?.let { return@intercept it }
                             }
                         }
                         initialResult
                     }
                 }
-            }
-        }
-    }
-
-    private fun hookDetailCloudListener(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val lk2Class = loadClassFlexible(classLoader, "lk2") ?: return
-        lk2Class.declaredMethods.filter { it.name == "onDataChange" }.forEach { m ->
-            attempt("hook lk2.onDataChange", silent = true) {
-                module.hookTracked(m, idPrefix = "cloud-discovery-detail-listener-onDataChange").intercept { chain ->
-                    if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                    val snapshot = chain.args.firstOrNull()
-                    val snapshotHasData = attempt("check snapshot exists", silent = true) {
-                        if (snapshot == null) false
-                        else {
-                            val exists = snapshot.javaClass.getMethod("exists").invoke(snapshot) as? Boolean
-                            val value = snapshot.javaClass.getMethod("getValue").invoke(snapshot)
-                            val childrenCount = snapshot.javaClass.getMethod("getChildrenCount").invoke(snapshot) as? Long
-                            (exists == true) || (value != null) || (childrenCount != null && childrenCount > 0L)
-                        }
-                    } ?: false
-
-                    val lk2Instance = chain.thisObject ?: return@intercept chain.proceed()
-                    val mk2Instance = lk2Instance.getFieldValue("a") ?: return@intercept chain.proceed()
-                    val jiInstance = mk2Instance.getFieldValue("e") ?: return@intercept chain.proceed()
-
-                    val pkgName = jiInstance.javaClass.getDeclaredMethod("getPackageName").invoke(jiInstance) as? String
-                    if (pkgName != null && isSnapshotInjectionEnabled()) {
-                        ensureScan(context, classLoader, targets)
-                        val matchingList = findMatchingBackups(pkgName)
-                        if (matchingList.isNotEmpty()) {
-                            if (snapshot != null) {
-                                val queryRef = FirebaseSnapshotSynthesizer.extractQueryRef(snapshot)
-                                if (queryRef != null) {
-                                    val mergedOrSyntheticSnapshot = if (snapshotHasData) {
-                                        FirebaseSnapshotSynthesizer.mergeSnapshotData(
-                                            classLoader, queryRef, snapshot, matchingList
-                                        )
-                                    } else {
-                                        FirebaseSnapshotSynthesizer.createSyntheticSnapshot(
-                                            classLoader, queryRef, matchingList
-                                        )
-                                    }
-
-                                    if (mergedOrSyntheticSnapshot != null) {
-                                        chain.proceed(arrayOf(mergedOrSyntheticSnapshot))
-                                        Log.i(TAG, "[CloudDiscovery] ✓ ${if (snapshotHasData) "Merged" else "Synthetic"} DataSnapshot injected for $pkgName with ${matchingList.size} backup(s)")
-                                        return@intercept null
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (snapshotHasData) {
-                        return@intercept chain.proceed()
-                    }
-
-                    val existingCloudBackups = attempt("getCloudBackups", silent = true) {
-                        jiInstance.javaClass.getDeclaredMethod("getCloudBackups").invoke(jiInstance)
-                    }
-                    if (existingCloudBackups != null && !isResultEmpty(existingCloudBackups)) {
-                        return@intercept chain.proceed()
-                    }
-
-                    if (pkgName != null && isSnapshotInjectionEnabled()) {
-                        val matching = findMatchingBackup(pkgName)
-                        if (matching != null) {
-                            Log.d(TAG, "[CloudDiscovery] Snapshot synthesis unavailable for $pkgName, falling back to UI reflection")
-                            buildAppCloudBackup(matching, classLoader)?.let { cloudBackup ->
-                                createBackupsObject(cloudBackup, classLoader)?.let { backupsObj ->
-                                    val appCloudBackupsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups")
-                                    jiInstance.javaClass.getDeclaredMethod("setCloudBackups", appCloudBackupsClass).invoke(jiInstance, backupsObj)
-
-                                    try {
-                                        val ex6Instance = mk2Instance.getFieldValue("l") ?: return@let
-                                        val wj2Class = loadClassFlexible(classLoader, "wj2") ?: loadClassFlexible(classLoader, "defpackage.wj2") ?: return@let
-                                        val yj2Class = loadClassFlexible(classLoader, "yj2") ?: loadClassFlexible(classLoader, "defpackage.yj2") ?: return@let
-                                        val xj2Class = loadClassFlexible(classLoader, "xj2") ?: loadClassFlexible(classLoader, "defpackage.xj2") ?: return@let
-                                        val backedUpEnum = xj2Class.enumConstants?.firstOrNull { it.toString() == "BackedUp" }
-
-                                        val apkSizeStr = formatBytes(matching.apkSize + matching.splitsSize)
-                                        val dataSizeStr = if (matching.dataSize > 0) "${formatBytes(matching.dataSize)} \uD83D\uDD12" else ""
-                                        val extDataSizeStr = if (matching.extDataSize > 0) "${formatBytes(matching.extDataSize)} \uD83D\uDD12" else ""
-                                        val totalSizeStr = formatBytes(matching.totalSize)
-
-                                        val wj2Item = wj2Class.constructors.firstOrNull()?.newInstance(
-                                            cloudBackup, apkSizeStr, matching.splitsLink != null, false,
-                                            dataSizeStr, matching.dataLink != null, "StandardEncryption",
-                                            extDataSizeStr, matching.extDataLink != null, "StandardEncryption",
-                                            "", false, null, "", totalSizeStr, "Cloud Backup ($totalSizeStr)",
-                                            "Version: 1.0", "Version: 1.0 (1)", false
-                                        ) ?: return@let
-
-                                        val yj2Instance = yj2Class.getConstructor(xj2Class, List::class.java).newInstance(backedUpEnum, listOf(wj2Item))
-                                        ex6Instance.javaClass.getMethod("k", Any::class.java).invoke(ex6Instance, yj2Instance)
-                                        Log.i(TAG, "[CloudDiscovery] Rendered cloud backup for $pkgName via UI reflection fallback")
-                                        return@intercept null
-                                    } catch (t: Throwable) {
-                                        Log.e(TAG, "[CloudDiscovery] UI reflection fallback also failed: ${t.message}")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    chain.proceed()
-                }
-            }
-        }
-    }
-
-    private fun hookBatchCloudLoader(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val ua1Class = loadClassFlexible(classLoader, "ua1") ?: return
-        ua1Class.declaredMethods.filter { it.name == "a" && it.parameterCount == 0 }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-batch-loader").intercept { chain ->
-                if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                ensureScan(context, classLoader, targets)
-
-                if (discoveredBackups.isEmpty()) return@intercept chain.proceed()
-
-                val jiClass = loadClassFlexible(classLoader, "ji") ?: return@intercept chain.proceed()
-                val appCloudBackupsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups") ?: return@intercept chain.proceed()
-                val companionObj = attempt("get ji.Companion", silent = true) {
-                    jiClass.getField("Companion").get(null)
-                }
-                val fromCloudBackupsMethod = attempt("get fromCloudBackups", silent = true) {
-                    companionObj?.javaClass?.getMethod("fromCloudBackups", appCloudBackupsClass)
-                        ?: jiClass.getMethod("fromCloudBackups", appCloudBackupsClass)
-                } ?: return@intercept chain.proceed()
-
-                val appBackupsCtor = appCloudBackupsClass.getConstructor(List::class.java)
-
-                val freshList = mutableListOf<Any>()
-                for ((_, appList) in discoveredBackups) {
-                    val cloudBackups = appList.mapNotNull { buildAppCloudBackup(it, classLoader) }
-                    if (cloudBackups.isNotEmpty()) {
-                        val backupsObj = appBackupsCtor.newInstance(cloudBackups)
-                        fromCloudBackupsMethod.invoke(companionObj ?: jiClass, backupsObj)?.let {
-                            freshList.add(it)
-                        }
-                    }
-                }
-
-                val ik6Class = loadClassFlexible(classLoader, "ik6")
-                val hk6Class = loadClassFlexible(classLoader, "hk6")
-                val successEnum = hk6Class?.enumConstants?.firstOrNull { it.toString() == "Success" }
-                if (ik6Class != null && successEnum != null) {
-                    val ctor = ik6Class.getConstructor(hk6Class, List::class.java, Boolean::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                    val allAppsCount = getAllDiscoveredApps().size
-                    Log.i(TAG, "[CloudDiscovery] Returned ${freshList.size} fresh apps for Cloud Synced Apps / Batch Cloud Restore (from $allAppsCount cloud backups across ${discoveredBackups.size} packages)")
-                    return@intercept ctor.newInstance(successEnum, freshList, false, 12)
-                }
-
-                chain.proceed()
-            }
-        }
-    }
-
-    private fun hookAppFilterHelper(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val qqClass = loadClassFlexible(classLoader, "qq") ?: return
-        val jiClass = loadClassFlexible(classLoader, "ji")
-        val getPkgMethod = jiClass?.getDeclaredMethod("getPackageName")
-        val appCloudBackupsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups")
-        val setCloudBackupsMethod = if (jiClass != null && appCloudBackupsClass != null) {
-            jiClass.getDeclaredMethod("setCloudBackups", appCloudBackupsClass)
-        } else null
-        val appBackupsCtor = appCloudBackupsClass?.getConstructor(List::class.java)
-
-        // Helper to attach discovered backups to a list of ji items
-        fun attachDiscoveredBackups(items: List<*>) {
-            if (!isSnapshotInjectionEnabled() || discoveredBackups.isEmpty() || getPkgMethod == null || setCloudBackupsMethod == null || appBackupsCtor == null) return
-            for (item in items) {
-                if (item == null) continue
-                val pkg = attempt("getPkg", silent = true) { getPkgMethod.invoke(item) as? String } ?: continue
-                val matchingList = findMatchingBackups(pkg)
-                if (matchingList.isEmpty()) continue
-                val existing = attempt("getCloudBackups", silent = true) {
-                    item.javaClass.getDeclaredMethod("getCloudBackups").invoke(item)
-                }
-                if (existing == null || isResultEmpty(existing)) {
-                    val cloudBackups = matchingList.mapNotNull { buildAppCloudBackup(it, classLoader) }
-                    if (cloudBackups.isNotEmpty()) {
-                        val backupsObj = appBackupsCtor.newInstance(cloudBackups)
-                        setCloudBackupsMethod.invoke(item, backupsObj)
-                    }
-                }
-            }
-        }
-
-        // Hook qq.a: Populate in-memory metadata before complex label/tag filters execute
-        qqClass.declaredMethods.filter { it.name == "a" }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-filter-helper-a").intercept { chain ->
-                if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                ensureScan(context, classLoader, targets)
-                (chain.args.firstOrNull() as? List<*>)?.let { attachDiscoveredBackups(it) }
-                chain.proceed()
-            }
-        }
-
-        // Hook qq.b: Direct filter for Synced / NotSynced apps bypassing broken RTDB network query
-        qqClass.declaredMethods.filter { it.name == "b" && it.parameterCount == 2 }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-filter-helper-b").intercept { chain ->
-                if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                val listArg = chain.args.getOrNull(0) as? List<*> ?: return@intercept chain.proceed()
-                val ce3Arg = chain.args.getOrNull(1) ?: return@intercept chain.proceed()
-
-                val filterName = ce3Arg.toString()
-                if (filterName != "Synced" && filterName != "NotSynced") {
-                    return@intercept chain.proceed()
-                }
-
-                ensureScan(context, classLoader, targets)
-                attachDiscoveredBackups(listArg)
-
-                if (getPkgMethod == null) return@intercept chain.proceed()
-
-                val filteredList = mutableListOf<Any>()
-                for (item in listArg) {
-                    if (item == null) continue
-                    val pkg = attempt("getPkg", silent = true) { getPkgMethod.invoke(item) as? String } ?: continue
-                    val hasBackup = findMatchingBackups(pkg).isNotEmpty()
-
-                    if (hasBackup && filterName == "Synced") {
-                        filteredList.add(item)
-                    } else if (!hasBackup && filterName == "NotSynced") {
-                        filteredList.add(item)
-                    }
-                }
-
-                Log.i(TAG, "[CloudDiscovery] Filtered ${filteredList.size} apps for $filterName (out of ${listArg.size} apps)")
-                filteredList
-            }
-        }
-    }
-
-    private fun hookCloudSyncTab(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val ng1Class = loadClassFlexible(classLoader, "ng1")
-        ng1Class?.declaredMethods?.filter { it.name == "c" }?.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-sync-tab-vm").intercept { chain ->
-                val result = chain.proceed()
-                if (!isCloudDiscoveryEnabled() || !isSnapshotInjectionEnabled()) return@intercept result
-                ensureScan(context, classLoader, targets)
-                val ng1Instance = chain.thisObject
-                if (discoveredBackups.isNotEmpty() || discoveredFolders.isNotEmpty() ||
-                    discoveredCalls.isNotEmpty() || discoveredSms.isNotEmpty() ||
-                    discoveredWalls.isNotEmpty() || discoveredWifi.isNotEmpty()) {
-                    postCloudSyncStats(ng1Instance, classLoader)
-                }
-                result
-            }
-        }
-
-        val jg1Class = loadClassFlexible(classLoader, "jg1")
-        jg1Class?.declaredMethods?.filter { it.name == "onDataChange" }?.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-sync-tab-listener").intercept { chain ->
-                if (!isCloudDiscoveryEnabled() || !isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                val snapshot = chain.args.firstOrNull()
-                val snapshotHasData = attempt("check sync tab snapshot", silent = true) {
-                    if (snapshot == null) false
-                    else {
-                        val exists = snapshot.javaClass.getMethod("exists").invoke(snapshot) as? Boolean
-                        val hasChildren = snapshot.javaClass.getMethod("hasChildren").invoke(snapshot) as? Boolean
-                        (exists == true) && (hasChildren == true)
-                    }
-                } ?: false
-
-                if (snapshotHasData) {
-                    return@intercept chain.proceed()
-                }
-
-                val hasDiscovered = discoveredBackups.isNotEmpty() || discoveredFolders.isNotEmpty() ||
-                        discoveredCalls.isNotEmpty() || discoveredSms.isNotEmpty() ||
-                        discoveredWalls.isNotEmpty() || discoveredWifi.isNotEmpty()
-
-                if (hasDiscovered) {
-                    val jg1Instance = chain.thisObject
-                    val ng1Instance = jg1Instance?.getFieldValue("q")
-                    postCloudSyncStats(ng1Instance, classLoader)
-                    return@intercept null
-                }
-                chain.proceed()
-            }
-        }
-    }
-
-    private fun postCloudSyncStats(ng1Instance: Any?, classLoader: ClassLoader) {
-        if (ng1Instance == null) return
-        mainHandler.post {
-            try {
-                val ex6Instance = ng1Instance.getFieldValue("f") ?: return@post
-                val z8Class = loadClassFlexible(classLoader, "z8") ?: return@post
-                val z8Ctor = z8Class.getConstructor(
-                    Int::class.javaPrimitiveType, Long::class.javaPrimitiveType,
-                    Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
-                )
-
-                val totalApps = discoveredBackups.size
-                val totalSpace = getAllDiscoveredApps().sumOf { it.totalSize } +
-                        discoveredFolders.values.sumOf { it.totalSize } +
-                        discoveredCalls.values.sumOf { it.size } +
-                        discoveredSms.values.sumOf { it.size } +
-                        discoveredWalls.values.sumOf { it.size } +
-                        discoveredWifi.values.sumOf { it.size }
-                val totalMessages = discoveredSms.size
-                val totalCalls = discoveredCalls.size
-                val totalFolders = discoveredFolders.size
-
-                val z8Instance = z8Ctor.newInstance(totalApps, totalSpace, totalMessages, totalCalls, totalFolders)
-                ex6Instance.javaClass.getMethod("k", Any::class.java).invoke(ex6Instance, z8Instance)
-                Log.i(TAG, "[CloudDiscovery] Posted Cloud Sync tab stats via fallback: $totalApps apps, $totalFolders folders, $totalCalls calls, $totalMessages sms, ${formatBytes(totalSpace)}")
-            } catch (t: Throwable) {
-                Log.e(TAG, "[CloudDiscovery] Failed to post Cloud Sync stats: ${t.message}")
-            }
-        }
-    }
-
-    private fun hookCloudBackupTags(module: XposedModule, classLoader: ClassLoader) {
-        val ob1Class = loadClassFlexible(classLoader, "ob1") ?: return
-        ob1Class.declaredMethods.filter { it.name == "a" }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-backup-tags").intercept { chain ->
-                val result = chain.proceed() as? List<*> ?: mutableListOf<String>()
-                if (!isSnapshotInjectionEnabled()) return@intercept result
-                val tags = result.filterIsInstance<String>().toMutableList()
-                for (app in getAllDiscoveredApps()) {
-                    if (app.backupTag.isNotBlank() && !tags.contains(app.backupTag)) {
-                        tags.add(app.backupTag)
-                    }
-                }
-                for (folder in discoveredFolders.values) {
-                    if (folder.tag.isNotBlank() && !tags.contains(folder.tag)) {
-                        tags.add(folder.tag)
-                    }
-                }
-                for (call in discoveredCalls.values) {
-                    if (call.tag.isNotBlank() && !tags.contains(call.tag)) {
-                        tags.add(call.tag)
-                    }
-                }
-                for (sms in discoveredSms.values) {
-                    if (sms.tag.isNotBlank() && !tags.contains(sms.tag)) {
-                        tags.add(sms.tag)
-                    }
-                }
-                tags
-            }
-        }
-    }
-
-    private fun hookFolderCloudLoader(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val sf1Class = loadClassFlexible(classLoader, "sf1") ?: return
-        sf1Class.declaredMethods.filter { it.name == "a" && it.parameterCount == 0 }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-folder-loader").intercept { chain ->
-                if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                ensureScan(context, classLoader, targets)
-                if (discoveredFolders.isEmpty()) return@intercept chain.proceed()
-
-                val freshFolderList = mutableListOf<Any>()
-                for (folder in discoveredFolders.values) {
-                    buildFolderMetadata(folder, classLoader)?.let { folderMeta ->
-                        freshFolderList.add(folderMeta)
-                    }
-                }
-
-                val ik6Class = loadClassFlexible(classLoader, "ik6")
-                val hk6Class = loadClassFlexible(classLoader, "hk6")
-                val successEnum = hk6Class?.enumConstants?.firstOrNull { it.toString() == "Success" }
-                if (ik6Class != null && successEnum != null) {
-                    val ctor = ik6Class.getConstructor(hk6Class, List::class.java, Boolean::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                    Log.i(TAG, "[CloudDiscovery] Returned ${freshFolderList.size} fresh folders for Cloud Folders tab (from ${discoveredFolders.size} cloud backups)")
-                    return@intercept ctor.newInstance(successEnum, freshFolderList, false, 12)
-                }
-
-                chain.proceed()
-            }
-        }
-    }
-
-    private fun hookFolderDetailCloudListener(
-        module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ) {
-        val km5Class = loadClassFlexible(classLoader, "km5") ?: return
-        km5Class.declaredMethods.filter { it.name == "onDataChange" }.forEach { m ->
-            module.hookTracked(m, idPrefix = "cloud-discovery-folder-detail-listener").intercept { chain ->
-                val result = chain.proceed()
-                if (!isCloudDiscoveryEnabled() || !isSnapshotInjectionEnabled()) return@intercept result
-                val km5Instance = chain.thisObject ?: return@intercept result
-                val dm3Instance = attempt("get dm3 from km5", silent = true) { km5Instance.getFieldValue("b") } ?: return@intercept result
-                val folderItem = attempt("get FolderItem from dm3", silent = true) {
-                    val kMethod = dm3Instance.javaClass.getMethod("k")
-                    kMethod.invoke(dm3Instance)
-                } ?: return@intercept result
-
-                val fid = attempt("get fid", silent = true) {
-                    folderItem.javaClass.getMethod("getId").invoke(folderItem) as? String
-                } ?: return@intercept result
-
-                ensureScan(context, classLoader, targets)
-                val matchingFolder = discoveredFolders[fid]
-                    ?: discoveredFolders.values.firstOrNull { it.id == fid || it.displayName.contains(fid) }
-
-                if (matchingFolder != null) {
-                    buildFolderMetadata(matchingFolder, classLoader)?.let { folderMeta ->
-                        val ol3Class = loadClassFlexible(classLoader, "ol3") ?: return@let
-                        val ol3Instance = ol3Class.getConstructor(folderMeta.javaClass).newInstance(folderMeta)
-                        val ex6Instance = dm3Instance.getFieldValue("i")
-                        ex6Instance?.javaClass?.getMethod("k", Any::class.java)?.invoke(ex6Instance, ol3Instance)
-                        Log.i(TAG, "[CloudDiscovery] ✓ Injected FolderMetadata into FolderDetailViewModel for folder $fid")
-                    }
-                }
-                result
-            }
-        }
-    }
-
-    private fun hookWallpaperCloudLoader(
-        module: XposedModule,
-        classLoader: ClassLoader,
-        factory: DriveFileItemFactory
-    ) {
-        val fu3Class = loadClassFlexible(classLoader, "fu3") ?: return
-        val kMethod = fu3Class.declaredMethods.firstOrNull { it.name == "k" && it.parameterCount == 0 } ?: return
-        if (!factory.isAvailable) return
-
-        module.hookTracked(
-            kMethod,
-            idPrefix = "gdrive-wall-cloud-k",
-            priority = XposedInterface.PRIORITY_HIGHEST,
-            deoptimize = true
-        ).intercept { chain ->
-            val original = chain.proceed()
-            if (!isSnapshotInjectionEnabled() || discoveredWalls.isEmpty()) return@intercept original
-
-            val existingWalls = factory.extractExistingItems(original)
-            val existingFileIds = existingWalls.mapNotNull { factory.extractFileId(it) }.toSet()
-
-            val pg1List = ArrayList<Any>(existingWalls)
-            var newlyAdded = 0
-
-            for (wall in discoveredWalls.values) {
-                if (existingFileIds.contains(wall.fileId) || existingFileIds.contains(wall.fileName)) {
-                    continue
-                }
-                factory.create(wall.fileName, wall.fileId, wall.size, wall.timestamp, wall.thumbnailLink)?.let {
-                    pg1List.add(it)
-                    newlyAdded++
-                }
-            }
-
-            if (newlyAdded > 0) {
-                factory.wrapInResult(pg1List) ?: original
-            } else {
-                original
-            }
-        }
-
-        hookWallpaperClickFallback(module, classLoader)
-    }
-
-    private fun hookWallpaperClickFallback(module: XposedModule, classLoader: ClassLoader) {
-        val xr0Class = loadClassFlexible(classLoader, "xr0")
-        val onClickMethod = xr0Class?.declaredMethods?.firstOrNull { it.name == "onClick" && it.parameterCount == 1 }
-        if (onClickMethod != null) {
-            module.hookTracked(
-                onClickMethod,
-                idPrefix = "wall-item-click-fallback",
-                priority = XposedInterface.PRIORITY_HIGHEST,
-                deoptimize = true
-            ).intercept { chain ->
-                if (!isSnapshotInjectionEnabled()) return@intercept chain.proceed()
-                val thisObj = chain.thisObject ?: return@intercept chain.proceed()
-                val aVal = attempt("read xr0.a", silent = true) {
-                    xr0Class.getDeclaredField("a").apply { isAccessible = true }.getInt(thisObj)
-                } ?: -1
-
-                if (aVal != 0) {
-                    val bObj = xr0Class.getDeclaredField("b").apply { isAccessible = true }.get(thisObj)
-                    val cObj = xr0Class.getDeclaredField("c").apply { isAccessible = true }.get(thisObj)
-                    val dObj = xr0Class.getDeclaredField("d").apply { isAccessible = true }.get(thisObj)
-
-                    if (bObj != null && cObj != null && dObj != null) {
-                        attempt("fallback wallpaper click", silent = true) {
-                            val lo8Class = bObj.javaClass
-                            val ivWall = lo8Class.getDeclaredField("u").apply { isAccessible = true }.get(bObj) as? ImageView
-                            if (ivWall != null && ivWall.drawable == null) {
-                                val mo8Class = cObj.javaClass
-                                val eField = mo8Class.getField("e").get(cObj)
-                                val isMultiSelect = eField?.javaClass?.getField("c")?.getBoolean(eField) ?: false
-                                if (!isMultiSelect) {
-                                    val lField = mo8Class.getField("l").get(cObj)
-                                    val ao8Class = loadClassFlexible(classLoader, "ao8")
-                                    if (ao8Class != null && lField != null) {
-                                        val dummyBitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
-                                        val ao8Instance = ao8Class.getConstructor(dObj.javaClass, Bitmap::class.java).newInstance(dObj, dummyBitmap)
-                                        lField.javaClass.getMethod("U", ao8Class).invoke(lField, ao8Instance)
-                                        return@intercept null
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                chain.proceed()
-            }
-        }
-    }
-
-    private fun hookWifiCloudLoader(
-        module: XposedModule,
-        classLoader: ClassLoader,
-        factory: DriveFileItemFactory
-    ) {
-        val us8Class = loadClassFlexible(classLoader, "us8")
-        val cMethod = us8Class?.declaredMethods?.firstOrNull { it.name == "c" && it.parameterCount == 0 && java.lang.reflect.Modifier.isStatic(it.modifiers) }
-        val wifiCloudDetailsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.firebase.WifiCloudDetails")
-
-        if (us8Class != null && wifiCloudDetailsClass != null) {
-            val methodsToHook = mutableListOf<java.lang.reflect.Method>()
-            us8Class.declaredMethods.filter { it.name == "c" && it.parameterCount == 0 }.forEach { methodsToHook.add(it) }
-            val companionClass = loadClassFlexible(classLoader, "us8\$a") ?: loadClassFlexible(classLoader, "us8\$Companion")
-            companionClass?.declaredMethods?.filter { it.name == "c" && it.parameterCount == 0 }?.forEach { methodsToHook.add(it) }
-
-            methodsToHook.forEach { m ->
-                module.hookTracked(
-                    m,
-                    idPrefix = "wifi-helper-cloud-details-c",
-                    priority = XposedInterface.PRIORITY_HIGHEST,
-                    deoptimize = true
-                ).intercept { chain ->
-                    if (isSnapshotInjectionEnabled() && discoveredWifi.isNotEmpty()) {
-                        val firstWifi = discoveredWifi.values.firstOrNull()
-                        if (firstWifi != null) {
-                            attempt("inject discovered wifi into us8.c", silent = true) {
-                                val ctor = wifiCloudDetailsClass.constructors.firstOrNull { it.parameterCount == 3 }
-                                    ?: wifiCloudDetailsClass.getConstructor(String::class.java, Long::class.javaObjectType, Int::class.javaObjectType)
-                                val details = ctor.newInstance(firstWifi.fileId, firstWifi.size, firstWifi.count)
-                                Log.i(TAG, "[CloudDiscovery] ✓ Injected WifiCloudDetails for us8.c: fileId=${firstWifi.fileId}, size=${firstWifi.size}, count=${firstWifi.count}")
-                                return@intercept details
-                            }
-                        }
-                    }
-
-                    chain.proceed()
-                }
-            }
-        }
-
-        val fu3Class = loadClassFlexible(classLoader, "fu3") ?: return
-        val lMethod = fu3Class.declaredMethods.firstOrNull { it.name == "l" && it.parameterCount == 0 } ?: return
-        if (!factory.isAvailable) return
-
-        module.hookTracked(
-            lMethod,
-            idPrefix = "gdrive-wifi-cloud-l",
-            priority = XposedInterface.PRIORITY_HIGHEST,
-            deoptimize = true
-        ).intercept { chain ->
-            val original = chain.proceed()
-            if (!isSnapshotInjectionEnabled() || discoveredWifi.isEmpty()) return@intercept original
-
-            val existingWifi = factory.extractExistingItems(original)
-            val existingFileIds = existingWifi.mapNotNull { factory.extractFileId(it) }.toSet()
-
-            val pg1List = ArrayList<Any>(existingWifi)
-            var newlyAdded = 0
-
-            for (wifi in discoveredWifi.values) {
-                if (existingFileIds.contains(wifi.fileId) || existingFileIds.contains(wifi.fileName)) {
-                    continue
-                }
-                factory.create(wifi.fileName, wifi.fileId, wifi.size)?.let {
-                    pg1List.add(it)
-                    newlyAdded++
-                }
-            }
-
-            if (newlyAdded > 0) {
-                factory.wrapInResult(pg1List) ?: original
-            } else {
-                original
             }
         }
     }
@@ -1595,6 +1119,24 @@ object CloudDiscoveryHook : HookHandler {
         }
         backupsList == null || backupsList.isEmpty()
     } ?: false
+
+    fun extractSnapshotKey(snapshot: Any?): String? {
+        if (snapshot == null) return null
+        return attempt("extractSnapshotKey", silent = true) {
+            (snapshot.javaClass.methods.firstOrNull { it.name == "getKey" && it.parameterCount == 0 }?.invoke(snapshot) as? String)
+                ?: (snapshot.getFieldValue("key") as? String)
+                ?: run {
+                    val ref = snapshot.getFieldValue("query")
+                        ?: snapshot.getFieldValue("a")
+                        ?: snapshot.getFieldValue("b")
+                    ref?.let { r ->
+                        (r.javaClass.methods.firstOrNull { it.name == "getKey" && it.parameterCount == 0 }?.invoke(r) as? String)
+                            ?: (r.javaClass.methods.firstOrNull { it.name == "e" && it.parameterCount == 0 && it.returnType == String::class.java }?.invoke(r) as? String)
+                            ?: (r.getFieldValue("key") as? String)
+                    }
+                }
+        }
+    }
 
     fun buildAppCloudBackup(app: DiscoveredCloudApp, classLoader: ClassLoader): Any? = attempt("build AppCloudBackup", silent = true) {
         val metaClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.CloudMetadata") ?: return null
@@ -1727,7 +1269,7 @@ object CloudDiscoveryHook : HookHandler {
             val fileList = providerResult.items
             val providerName = scanner.providerName
 
-            val appGroups = mutableMapOf<Triple<String, String, String>, MutableMap<String, CloudFileItem>>()
+            val appGroups = mutableMapOf<Pair<String, String>, MutableMap<String, Pair<String, CloudFileItem>>>()
             val folderGroups = mutableMapOf<Pair<String, String>, MutableMap<String, CloudFileItem>>()
 
             for (fileObj in fileList) {
@@ -1822,12 +1364,73 @@ object CloudDiscoveryHook : HookHandler {
                     val part = appMatcher.group(2) ?: continue
                     val tag = appMatcher.group(3) ?: continue
                     val backupId = appMatcher.group(4) ?: continue
-                    appGroups.getOrPut(Triple(pkg, backupId, tag)) { mutableMapOf() }[part] = fileObj
+                    appGroups.getOrPut(Pair(pkg, backupId)) { mutableMapOf() }[part] = Pair(tag, fileObj)
                 }
             }
 
-            for ((key, parts) in appGroups) {
-                val (pkg, backupId, tag) = key
+            for ((key, partsMap) in appGroups) {
+                val (pkg, backupId) = key
+                val resolvedTag = partsMap["app"]?.first
+                    ?: partsMap["apk"]?.first
+                    ?: partsMap["ext"]?.first
+                    ?: partsMap["dat"]?.first
+                    ?: partsMap.values.firstOrNull { it.first.isNotBlank() && it.first != "DEFAULT" }?.first
+                    ?: partsMap.values.firstOrNull()?.first
+                    ?: deviceTag
+
+                val parts = partsMap.mapValues { it.value.second }
+
+                // Direct Index Record Loading: if an uploaded index record exists, load it directly without reconstruction
+                val metaItem = parts["meta"] ?: parts["json"]
+                if (metaItem != null) {
+                    val metaText = scanner.downloadFileText(context, sp, metaItem)
+                    if (!metaText.isNullOrBlank()) {
+                        val parsed = attempt("parse direct cloud index record", silent = true) {
+                            val json = JSONObject(metaText)
+                            DiscoveredCloudApp.fromJson(pkg, json).copy(provider = providerName)
+                        }
+                        if (parsed != null && parsed.sanitizedAppId.isNotBlank()) {
+                            val apkItem = parts["apk"] ?: parts["app"]
+                            val extItem = parts["ext"] ?: parts["extra"]
+                            val datItem = parts["dat"] ?: parts["data"]
+                            val obbItem = parts["obb"] ?: parts["splits"]
+                            val medItem = parts["med"] ?: parts["media"]
+
+                            val finalTag = parsed.backupTag.takeIf { it.isNotBlank() && it != "DEFAULT" } ?: resolvedTag
+                            val finalApkLink = parsed.apkLink?.takeIf { it.isNotBlank() } ?: apkItem?.id
+                            val finalApkSize = if (parsed.apkSize > 0) parsed.apkSize else (apkItem?.size ?: 0L)
+                            val finalExtLink = parsed.extraLink?.takeIf { it.isNotBlank() } ?: extItem?.id
+                            val finalExtSize = if (parsed.extraSize > 0) parsed.extraSize else (extItem?.size ?: 0L)
+                            val finalDatLink = parsed.dataLink?.takeIf { it.isNotBlank() } ?: datItem?.id
+                            val finalDatSize = if (parsed.dataSize > 0) parsed.dataSize else (datItem?.size ?: 0L)
+                            val finalSplitsLink = parsed.splitsLink?.takeIf { it.isNotBlank() } ?: obbItem?.id
+                            val finalSplitsSize = if (parsed.splitsSize > 0) parsed.splitsSize else (obbItem?.size ?: 0L)
+
+                            val calculatedTotal = if (parsed.totalSize > 0) parsed.totalSize else (
+                                finalApkSize + finalExtSize + finalDatSize + finalSplitsSize + (medItem?.size ?: 0L)
+                            )
+
+                            val updated = parsed.copy(
+                                backupTag = finalTag,
+                                apkLink = finalApkLink,
+                                apkSize = finalApkSize,
+                                extraLink = finalExtLink,
+                                extraSize = finalExtSize,
+                                dataLink = finalDatLink,
+                                dataSize = finalDatSize,
+                                splitsLink = finalSplitsLink,
+                                splitsSize = finalSplitsSize,
+                                totalSize = calculatedTotal
+                            )
+
+                            Log.i(TAG, "[CloudDiscovery] Loaded direct cloud index record for $pkg ($backupId) from $providerName without reconstruction")
+                            addDiscoveredBackup(updated)
+                            totalIndexedCount++
+                            continue
+                        }
+                    }
+                }
+
                 val sanitizedAppId = pkg.replace(".", "")
                 var versionCode: Long = 0L
                 var versionName: String = ""
@@ -1904,7 +1507,7 @@ object CloudDiscoveryHook : HookHandler {
                     packageName = pkg,
                     sanitizedAppId = sanitizedAppId,
                     backupId = backupId,
-                    backupTag = tag,
+                    backupTag = resolvedTag,
                     appName = appName,
                     dateBackup = calculatedDateBackup,
                     apkLink = apkFileId,
@@ -1997,20 +1600,6 @@ object CloudDiscoveryHook : HookHandler {
         }
 
         saveDiskCache(context)
-        attempt("notify ua1 cloud repository refresh", silent = true) {
-            val ua1Class = loadClassFlexible(classLoader, "ua1")
-            val ua1Instance = ua1Class?.getField("g")?.get(null)
-            if (ua1Instance != null) {
-                ua1Instance.javaClass.getField("b").set(ua1Instance, false)
-            }
-        }
-        attempt("notify sf1 cloud folders repository refresh", silent = true) {
-            val sf1Class = loadClassFlexible(classLoader, "sf1")
-            val sf1Instance = sf1Class?.getField("g")?.get(null)
-            if (sf1Instance != null) {
-                sf1Instance.javaClass.getField("b").set(sf1Instance, false)
-            }
-        }
         Log.i(TAG, "[CloudDiscovery] Successfully indexed $totalIndexedCount cloud items across providers into catalog")
         return totalIndexedCount
     }

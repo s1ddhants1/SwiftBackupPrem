@@ -58,6 +58,59 @@ object CloudScannerRegistry {
         return results
     }
 
+
+    fun uploadToActiveProviders(
+        context: Context,
+        remoteRelativePath: String,
+        file: File
+    ): Boolean {
+        val sp: SharedPreferences = attempt("get swiftbackup main prefs", silent = true) {
+            context.getSharedPreferences("org.swiftapps.swiftbackup_preferences", Context.MODE_PRIVATE)
+        } ?: return false
+        val aggregatedPrefs = buildAggregatedPreferences(context, sp)
+        var anySuccess = false
+        for (scanner in scanners) {
+            try {
+                if (scanner.isConfigured(context, aggregatedPrefs)) {
+                    val ok = scanner.uploadFile(context, aggregatedPrefs, remoteRelativePath, file)
+                    if (ok) {
+                        Log.i(TAG, "[CloudScannerRegistry] Successfully uploaded $remoteRelativePath to ${scanner.providerName}")
+                        anySuccess = true
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "[CloudScannerRegistry] Failed to upload $remoteRelativePath to ${scanner.providerName}: ${t.message}")
+            }
+        }
+        return anySuccess
+    }
+
+    fun uploadTextToActiveProviders(
+        context: Context,
+        remoteRelativePath: String,
+        content: String
+    ): Boolean {
+        val sp: SharedPreferences = attempt("get swiftbackup main prefs", silent = true) {
+            context.getSharedPreferences("org.swiftapps.swiftbackup_preferences", Context.MODE_PRIVATE)
+        } ?: return false
+        val aggregatedPrefs = buildAggregatedPreferences(context, sp)
+        var anySuccess = false
+        for (scanner in scanners) {
+            try {
+                if (scanner.isConfigured(context, aggregatedPrefs)) {
+                    val ok = scanner.uploadFileText(context, aggregatedPrefs, remoteRelativePath, content)
+                    if (ok) {
+                        Log.i(TAG, "[CloudScannerRegistry] Successfully uploaded text $remoteRelativePath to ${scanner.providerName}")
+                        anySuccess = true
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "[CloudScannerRegistry] Failed to upload text $remoteRelativePath to ${scanner.providerName}: ${t.message}")
+            }
+        }
+        return anySuccess
+    }
+
     @SuppressLint("SdCardPath")
     private fun buildAggregatedPreferences(context: Context, primaryPrefs: SharedPreferences): SharedPreferences {
         val prefsDir = File(context.filesDir?.parentFile, "shared_prefs")

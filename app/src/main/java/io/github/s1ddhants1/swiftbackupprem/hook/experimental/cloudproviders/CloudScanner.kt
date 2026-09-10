@@ -28,4 +28,18 @@ interface CloudScanner {
         startByte: Long,
         endByte: Long
     ): ByteArray? = null
+
+    fun uploadFileText(
+        context: Context,
+        prefs: SharedPreferences,
+        remoteRelativePath: String,
+        content: String
+    ): Boolean = false
+
+    fun uploadFile(
+        context: Context,
+        prefs: SharedPreferences,
+        remoteRelativePath: String,
+        file: java.io.File
+    ): Boolean = false
 }

@@ -18,6 +18,7 @@ class PreferencesManagerTest {
         assertFalse(prefs.enableSnapshotInjection)
         assertFalse(prefs.enableBackupRebuilder)
         assertFalse(prefs.syncMetadataToFirebase)
+        assertFalse(prefs.unlockLocalCloudFeatures)
         assertFalse(prefs.customFirebaseApp)
         assertEquals("", prefs.googleAppId)
         assertEquals("", prefs.googleApiKey)
@@ -34,6 +35,7 @@ class PreferencesManagerTest {
 
         prefs.enablePremium = false
         prefs.disableTelemetry = false
+        prefs.unlockLocalCloudFeatures = true
         prefs.customFirebaseApp = true
         prefs.googleAppId = "test-app-id"
         prefs.googleApiKey = "test-api-key"
@@ -45,6 +47,7 @@ class PreferencesManagerTest {
 
         assertFalse(prefs.enablePremium)
         assertFalse(prefs.disableTelemetry)
+        assertTrue(prefs.unlockLocalCloudFeatures)
         assertTrue(prefs.customFirebaseApp)
         assertEquals("test-app-id", prefs.googleAppId)
         assertEquals("test-api-key", prefs.googleApiKey)
@@ -90,6 +93,30 @@ class PreferencesManagerTest {
         assertFalse(prefs.enableSnapshotInjection)
         assertFalse(prefs.enableBackupRebuilder)
         assertFalse(prefs.syncMetadataToFirebase)
+    }
+
+    @Test
+    fun applyConfigPreservesCloudDiscoveryWhenUnlockLocalCloudFeaturesIsTrue() {
+        val prefs = PreferencesManager(null)
+        val config = io.github.s1ddhants1.swiftbackupprem.model.SbpConfig(
+            customFirebaseApp = false,
+            unlockLocalCloudFeatures = true,
+            enableCloudDiscovery = true,
+            enableGoogleDriveScope = true,
+            enableSnapshotInjection = true,
+            enableBackupRebuilder = true,
+            syncMetadataToFirebase = true
+        )
+
+        prefs.applyConfig(config)
+
+        assertFalse(prefs.customFirebaseApp)
+        assertTrue(prefs.unlockLocalCloudFeatures)
+        assertTrue(prefs.enableCloudDiscovery)
+        assertFalse(prefs.enableGoogleDriveScope)
+        assertTrue(prefs.enableSnapshotInjection)
+        assertTrue(prefs.enableBackupRebuilder)
+        assertTrue(prefs.syncMetadataToFirebase)
     }
 
     private class FakeSharedPreferences : android.content.SharedPreferences {

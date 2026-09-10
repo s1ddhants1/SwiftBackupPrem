@@ -290,6 +290,52 @@ class CloudDiscoveryHookTest {
         assertEquals(23L, meta["versionCode"])
         assertEquals("2.0.0", meta["versionName"])
     }
+
+    @Test
+    fun testDirectIndexRecordParsingWithoutReconstruction() {
+        val rawJson = """
+            {
+              "packageName": "com.dv.adm",
+              "appId": "comdvadm",
+              "backupId": "20260908-195034",
+              "backupTag": "CPH2573",
+              "name": "Advanced Download Manager",
+              "versionCode": 140400,
+              "versionName": "14.0.40",
+              "dateBackup": 1788877834000,
+              "specialDataLink": "drive-file-id-extra",
+              "specialDataSize": 2048,
+              "apkSize": 15000000,
+              "dataSize": 50000
+            }
+        """.trimIndent()
+
+        val parsed = CloudDiscoveryHook.DiscoveredCloudApp.fromJson("com.dv.adm", org.json.JSONObject(rawJson))
+
+        assertEquals("com.dv.adm", parsed.packageName)
+        assertEquals("comdvadm", parsed.sanitizedAppId)
+        assertEquals("20260908-195034", parsed.backupId)
+        assertEquals("CPH2573", parsed.backupTag)
+        assertEquals("Advanced Download Manager", parsed.appName)
+        assertEquals(140400L, parsed.versionCode)
+        assertEquals("14.0.40", parsed.versionName)
+        assertEquals("drive-file-id-extra", parsed.extraLink)
+        assertEquals(2048L, parsed.extraSize)
+        assertEquals(15000000L, parsed.apkSize)
+        assertEquals(50000L, parsed.dataSize)
+    }
+
+    @Test
+    fun testDexScannerResolvesNodeUtilities() {
+        val baseApk = java.io.File("/home/s1ddhants1/.gemini/antigravity-ide/brain/a045d62b-0502-4275-bf69-f5c9ed351022/scratch/base.apk")
+        if (baseApk.exists()) {
+            val resolvedClass = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.scanApkForNodeMethod(
+                baseApk.absolutePath,
+                "Lqn5;"
+            )
+            assertEquals("xh8", resolvedClass)
+        }
+    }
 }
 
 

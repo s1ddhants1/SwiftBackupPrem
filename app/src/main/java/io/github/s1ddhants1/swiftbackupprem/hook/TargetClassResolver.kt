@@ -34,6 +34,7 @@ object TargetClassResolver {
         var authRequestBuilder: Class<*>? = null
         var appBackup: Class<*>? = null
         var appMetadataXml: Class<*>? = null
+        var fireSynchronizer: Class<*>? = null
 
         val ver = Integer.valueOf(ctx.packageManager.getPackageInfo(Consts.packageName, 0).versionCode)
         versionMap[ver]?.let { c ->
@@ -56,16 +57,9 @@ object TargetClassResolver {
             if (cloudGms != null) break
         }
 
-        if (appBackup == null) {
-            appBackup = loadClassFlexible(cl, "defpackage.hk") ?: loadClassFlexible(cl, "hk")
-        }
-        if (appMetadataXml == null) {
-            appMetadataXml = loadClassFlexible(cl, "defpackage.cu") ?: loadClassFlexible(cl, "cu")
-        }
-
-        if (clientId != null && v != null && homeVm != null && authUser != null && oauthHelper != null && authRequestBuilder != null && appBackup != null && appMetadataXml != null) {
+        if (clientId != null && v != null && homeVm != null && authUser != null && oauthHelper != null && authRequestBuilder != null) {
             Log.d(Consts.TAG, "Resolved Swift Backup hook classes without DexKit scan")
-            return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml)
+            return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer)
         }
 
         attempt("load dexkit native library") { System.loadLibrary("dexkit") }
@@ -155,13 +149,19 @@ object TargetClassResolver {
                 if (appBackup == null) {
                     appBackup = bridge.findSingle(cl, "appBackupClass", filterInner = false) {
                         matcher { usingStrings("apkBackupDate", "dataBackupDate") }
-                    } ?: loadClassFlexible(cl, "defpackage.hk") ?: loadClassFlexible(cl, "hk")
+                    }
                 }
 
                 if (appMetadataXml == null) {
                     appMetadataXml = bridge.findSingle(cl, "appMetadataXmlClass", filterInner = false) {
                         matcher { usingStrings("dateBackupUpdated", "minSBVersionCodeRequired") }
-                    } ?: loadClassFlexible(cl, "defpackage.cu") ?: loadClassFlexible(cl, "cu")
+                    }
+                }
+
+                if (fireSynchronizer == null) {
+                    fireSynchronizer = bridge.findSingle(cl, "fireSynchronizerClass", filterInner = true) {
+                        matcher { usingStrings("FireSynchronizer") }
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -172,7 +172,7 @@ object TargetClassResolver {
             Log.w(Consts.TAG, "Couldn't fully hook Swift Backup.")
         }
 
-        return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml)
+        return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer)
     }
 
     private fun DexKitBridge.findSingle(

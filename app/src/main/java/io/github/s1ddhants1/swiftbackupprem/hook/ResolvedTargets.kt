@@ -13,7 +13,8 @@ data class ResolvedTargets(
     val oauthHelperClass: Class<*>? = null,
     val authRequestBuilderClass: Class<*>? = null,
     val appBackupClass: Class<*>? = null,
-    val appMetadataXmlClass: Class<*>? = null
+    val appMetadataXmlClass: Class<*>? = null,
+    val fireSynchronizerClass: Class<*>? = null
 ) {
     val isFullyResolved: Boolean
         get() = listOf(clientIdClass, vClass, homeViewModelClass, authUserClass).all { it != null }

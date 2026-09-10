@@ -31,7 +31,10 @@
   - [Step 5: Enable Google Drive API & OAuth Scopes](#step-5-enable-google-drive-api--oauth-scopes)
   - [Step 6: Import or Enter Credentials in SwiftBackupPrem](#step-6-import-or-enter-credentials-in-swiftbackupprem)
 - [Migrating & Accessing Backups from Default Firebase](#migrating--accessing-backups-from-default-firebase)
-- [Automated Backup Rebuild & Restore](#automated-backup-rebuild--restore)
+- [Backup Migration Hub](#backup-migration-hub)
+  - [Local Migrator (Decrypt & Re-encrypt Tool)](#local-migrator-decrypt--re-encrypt-tool)
+  - [Cloud Discovery & Injection](#cloud-discovery--injection)
+  - [Firebase Realtime Database Metadata Sync](#firebase-realtime-database-metadata-sync)
 - [Configuration Export & Migration](#configuration-export--migration)
 - [Building from Source](#building-from-source)
 - [Community & Support](#community--support)
@@ -45,8 +48,10 @@
 
 - **Premium Toggle & Unlocking**: Enables all Swift Backup Premium functionality without needing Google Play Store licensing.
 - **Disable Telemetry & Tracking**: Blocks Firebase Analytics, Crashlytics, Sessions, Installations, and Google DataTransport tracking calls for maximum privacy.
-- **Custom Firebase Backend (Anti-Ban & Privacy)**: Directs Swift Backup to use your personal Firebase instance for user authentication and cloud synchronization metadata.
-- **Google Drive Full Access & Cloud Restore**: Upgrades Google Drive OAuth scopes to discover backups across accounts, automatically fetches & decodes cloud backup metadata (apps, system data, folders), and indexes cloud backups without relying on original Firebase catalog state.
+- **Custom Firebase Backend**: Directs Swift Backup to use your personal Firebase instance for user authentication and cloud synchronization metadata.
+- **Local Backup Migrator & Re-encryptor**: On-device cryptographic engine to decrypt, repair missing metadata (`.xml`, `.extra`, `metadata.json`), switch encryption keys between Shared Anonymous Key and Custom Firebase UIDs, or export unencrypted portable archives (`.apk`, `.tar.gz`, `.json`).
+- **Universal Cloud Discovery & Snapshot Injection**: Multi-cloud scanner (Google Drive, OneDrive, Dropbox, Box, pCloud, S3, WebDAV / Nextcloud) that discovers cloud backups without prior database catalog state, injects synthetic Firebase `DataSnapshot` objects into the native restore UI, and synchronizes metadata to private Firebase RTDB.
+- **Google Drive Full OAuth Scope Expansion**: Upgrades runtime OAuth scopes from restricted `drive.file` to full `drive` access to discover backups across multiple accounts and past ROM installations.
 
 ### Additional features
 
@@ -396,22 +401,154 @@ or in case of cloud folder: `Swift Backup (example16char)`
 
 ---
 
-## Automated Backup Rebuild & Restore
+## Backup Migration Hub
 
-When the **Cloud Backup Restore** toggle is turned on in SwiftBackupPrem, the module enables automated cloud backup restoration:
+SwiftBackupPrem features a powerful, built-in **Backup Migration Hub** (accessible by tapping **Open Migrator** on the **Backup Migration** card from the main screen).
 
-1. **Direct In-App Cloud Restore**: Indexes all backups directly from your cloud folder, decodes cloud metadata and indexes them in real-time across the app (Single App Details, Cloud Sync tab, and Batch Restore).
-2. **Local Cloud Backup Rebuild**: When cloud backup files (`.app`, `.dat`, `.splits`, `.extdat`, `.extra`) are downloaded or copied to your device storage:
-   - Swift Backup typically requires a `<packageName>.xml` metadata file which is absent in raw cloud files.
-   - The module detects missing metadata, decrypts the `.extra` payload on the fly using your active Firebase UID key (Conceal AES-GCM-256 + Zstandard), and generates the `<packageName>.xml`.
-   - The backups immediately appear with all components (APK, App Data, External Data, Splits) and are 100% restorable.
+The Hub bridges the gap between different Firebase environments and cloud storage configurations through two dedicated tabs:
+
+1. **Local Migration**: An on-device cryptographic and metadata reconstruction tool to decrypt, convert, and re-encrypt existing backup folders across different Firebase UIDs, anonymous keys, or unencrypted portable formats.
+2. **Cloud Discovery & Injection**: A runtime hooking and scanning engine that discovers backups across diverse cloud providers (Google Drive, OneDrive, Dropbox, Box, pCloud, S3, WebDAV / Nextcloud) and injects them directly into Swift Backup's restore screens without requiring prior database records.
+
+---
+
+### Local Migrator (Decrypt & Re-encrypt Tool)
+
+Swift Backup encrypts application data (`.dat`, `.extdat`, `.med`), system payloads, and directory archives (`folder-base.fld`) using Facebook Conceal (AES-256-GCM + Zstandard compression) keyed against the user's active Firebase UID. If you switch to a custom Firebase backend, set up a new account, or recover backups after being banned from the official backend, the encryption key changes—making older backups unreadable by the new account.
+
+The **Local Migrator** resolves this entirely on-device without requiring internet access or root shell commands. It recursively inspects backup folders, decrypts archives using the source key, reconstructs missing metadata, and re-encrypts or extracts the data into your chosen target format.
+
+#### 4-Step Migration Workflow
+
+1. **Step 1: Source Folder**
+   - Enter the path to your existing backup directory or tap the folder icon to select it via the system Document Tree picker (e.g. `/sdcard/Download/SwiftBackup` or `/sdcard/SwiftBackup/accounts/<oldHash>/`).
+   - The engine recursively walks the directory tree (up to 20 levels deep) to identify all app backup directories (containing `.app`, `.apk`, `.dat`, `.splits`, `.extdat`, `.med`, `.xml`, or `.extra`) and folder backups (starting with `Folder-` or containing `folder-base.*` / `metadata.json`).
+
+2. **Step 2: Decryption Key (Source UID)**
+   - Enter or paste the Firebase UID that originally encrypted the backups.
+   - **Key Presets & Detected UIDs**: Tap the refresh icon to auto-detect candidate Firebase UIDs found in Swift Backup's local configuration, cached tokens (`.sbp_auth_state`), or preferences.
+   - **Shared Anonymous Key**: Tap the **Shared Anonymous Key** chip to fill in the built-in anonymous key (`d58b0944415a4889d7f11aa95fbeca50`) if migrating from anonymous offline backups.
+
+3. **Step 3: Target Encryption Mode**
+   Choose how you want the migrated backups to be packaged:
+   - **Shared Anonymous Key (Recommended)**: Re-encrypts archives using Swift Backup's static anonymous key. Output is stored under account hash `8690a48a4fcc72f1` and can be restored immediately in Swift Backup **offline without logging into any Firebase account**.
+   - **Custom Firebase UID**: Re-encrypts archives specifically for your custom Firebase project UID. Ideal if you want backups linked to your logged-in Google account.
+   - **Unencrypted Backups**: Strips AES-256-GCM Conceal encryption completely from data slices (`.dat`, `.extdat`, `.med`, `folder-base.fld`), keeping Swift Backup's directory layout and generating plaintext `.xml` metadata.
+     - **Portable Formats Checkbox**: When Unencrypted mode is active, check **Convert to standard portable formats (.apk, .tar.gz, .json)** to extract standard standalone files into `ExtractedBackups/`:
+       - `.app` / `.apk` &rarr; `<packageName>.apk`
+       - `.splits` &rarr; `<packageName>_splits.tar`
+       - `.dat` &rarr; `<packageName>_data.tar`
+       - `.extdat` &rarr; `<packageName>_external_data.tar`
+       - `.med` &rarr; `<packageName>_media.tar`
+       - `.extra` &rarr; `<packageName>_extras.json`
+       - `.xml` &rarr; `<packageName>_metadata.json`
+       - `.cls` &rarr; `<packageName>_call_logs.json`
+       - `.msg` &rarr; `<packageName>_sms_messages.json`
+       - `.wfi` &rarr; `<packageName>_wifi.json`
+       - `.wal` &rarr; `<packageName>_wallpaper.png`
+       - `folder-base.fld` &rarr; `<folderName>.tar`
+       - `folder-base.flm` &rarr; `<folderName>_manifest.json`
+
+4. **Step 4: Destination Folder & Start Migration**
+   - Enter the output directory (defaults to `/storage/emulated/0/SwiftBackup`).
+   - The engine organizes files into Swift Backup's standard hierarchy:
+     - `SwiftBackup/accounts/<accountHash>/backups/apps/local/<packageName>/<backupId>/`
+     - `SwiftBackup/accounts/<accountHash>/backups/folders/local/<folderName>/`
+   - Tap **Start Migration**. The screen displays real-time progress indicators (item count, percentage bar, and current package), along with live execution logs.
+   - **Metadata Reconstruction**: If original `.xml` metadata is missing, the engine automatically extracts metadata from the APK manifest (`versionCode`, `versionName`, app label) and decrypts the `.extra` payload for SSAID, permission states, and notification policy settings.
+
+> [!NOTE]
+> **Storage Permission Notice**  
+> On Android 11+ (API 30+), the app requires the **Manage External Storage (All Files Access)** permission to scan and write backup folders across storage volumes. If prompted, grant access via system settings.
+
+---
+
+### Cloud Discovery & Injection
+
+Swift Backup normally depends strictly on Firebase Realtime Database (RTDB) records to discover and list cloud backups. If an RTDB record is missing (such as when using a Custom Firebase backend, restoring after an account ban, or restoring across devices), Swift Backup cannot see the backups stored in your cloud, even if the files exist in your cloud drive.
+
+The **Cloud Discovery & Injection** suite bypasses this limitation entirely. Running at the Xposed hook layer, it actively scans configured cloud storage remotes, extracts metadata on the fly, and injects synthetic snapshots into Swift Backup's runtime memory.
+
+> [!IMPORTANT]
+> All Cloud Discovery and Sync features require **Custom Firebase App** to be enabled in SwiftBackupPrem settings.
+
+#### 1. Google Drive Full OAuth Scope Expansion
+
+- **Default Swift Backup Behavior**: Requests the restricted `https://www.googleapis.com/auth/drive.file` scope, limiting file visibility strictly to files created by the current app session.
+- **Expanded Scope**: When **Google Drive Full OAuth Scope** is enabled, the module dynamically intercepts OAuth request builders, URI builders, and authentication intents during sign-in, upgrading the requested scope to:
+  ```
+  https://www.googleapis.com/auth/drive
+  ```
+- **Result**: Grants Swift Backup visibility to query and restore backups uploaded from different devices, previous ROMs, or prior accounts.
 
 > [!WARNING]
-> **Scope Disclaimer & Security Notice**:
->
-> - Standard Swift Backup operates under the safe, per-file `https://www.googleapis.com/auth/drive.file` scope configured in [Step 5](#step-5-enable-google-drive-api--oauth-scopes).
-> - Enabling **Google Drive Full Access & Cloud Restore** dynamically expands the runtime OAuth scope to `https://www.googleapis.com/auth/drive` (Full Drive Access) in order to query, discover, and index backups created across different devices, past Firebase projects, or manual cloud transfers.
-> - Because `.../auth/drive` is classified as a sensitive scope by Google, Google may display a standard _"Google hasn't verified this app"_ warning during initial sign-in. This is expected for personal developer projects—click **Advanced > Go to Swift Backup (unsafe)** to proceed safely.
+> **"Google hasn't verified this app" Notice**:  
+> Because `https://www.googleapis.com/auth/drive` is classified as a sensitive scope, Google Cloud displays an unverified app warning during Google Sign-In. Click **Advanced > Go to Swift Backup (unsafe)** to proceed. This is standard behavior for personal developer projects.
+
+#### 2. Universal Cloud Discovery
+
+When **Universal Cloud Discovery** is toggled on, SwiftBackupPrem deploys native cloud scanners across all connected remote storage providers supported by Swift Backup:
+
+| Provider                          | Scanner Details & Capabilities                                                                                                                    |
+| :-------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Google Drive**                  | Scans Swift Backup root directories, resolves file IDs, and parses nested app directories via Google Drive API v3.                                |
+| **Microsoft OneDrive**            | Restricts scans to validated Swift Backup root folders, encodes relative paths, and handles batch Graph API pagination with HTTP range downloads. |
+| **Dropbox**                       | Queries Dropbox API v2 endpoints to map application and folder backup hierarchies.                                                                |
+| **Box**                           | Traverses Box storage trees using the Box REST API v2.                                                                                            |
+| **pCloud**                        | Inspects cloud archives and directory trees via pCloud REST APIs.                                                                                 |
+| **Amazon S3 / S3-Compatible**     | Scans buckets using AWS S3 API (supports MinIO, Wasabi, Backblaze B2, Ceph, etc.).                                                                |
+| **WebDAV / Nextcloud / ownCloud** | Uses WebDAV XML `PROPFIND` queries to traverse remote directories and discover backup slices.                                                     |
+
+##### Supported Cloud Components:
+
+- **Applications**: APKs (`.app`/`.apk`), split APKs (`.splits`), app data (`.dat`), external data (`.extdat`), media (`.med`), and metadata (`.extra`).
+- **Folders**: Custom folder archives (`.fld`, `.flm`, `metadata.json`).
+- **System Data**: Call logs (`.cls`), SMS messages (`.msg`), Wallpapers (`.wal`, `.wal.png`), and Wi-Fi configurations (`.wfi`).
+
+##### Remote APK Manifest Parsing via HTTP Range Requests:
+
+To display accurate app titles, package names, and version codes without downloading multi-gigabyte APKs over mobile data, the discovery engine incorporates `ApkRangeManifestParser`. It performs HTTP Range requests to fetch only the ZIP central directory and parse `AndroidManifest.xml` remotely in seconds.
+
+#### 3. Realtime DB Snapshot Injection
+
+The module includes an in-memory **Firebase Snapshot Synthesizer** (`FirebaseSnapshotSynthesizer`):
+
+- Hooks into Swift Backup's internal Firebase queries and DataSnapshot handlers (`AppCloudBackups.fromSnapshot`, single-app details listeners, batch cloud restore loaders, app filter helpers, cloud sync tab, and folder loaders).
+- Synthesizes live `DataSnapshot` objects formatted identically to native RTDB entries under the `cloud_v1` hierarchy.
+- **Result**: Discovered cloud backups appear immediately in:
+  - **Single App Details** (with all restorable parts: APK, Data, Ext Data, Splits)
+  - **Cloud Sync Tab** (with accurate backup timestamps and device tags)
+  - **Batch Restore Screen** (allowing one-tap bulk restoration)
+  - **Cloud Backup Tags Dropdown** (filtering backups by device model / tag)
+
+#### 4. Cloud Discovery Cache
+
+Discovered cloud backups are saved locally to:
+
+```
+/sdcard/SwiftBackup/cloud_discovered_cache.json
+```
+
+- Provides instant offline navigation across restore screens without waiting for network scans on every screen launch.
+- An in-memory cache TTL (60 seconds) prevents redundant cloud network requests during rapid screen switching.
+- Tap **Clear Cloud Cache** in the app at any time to purge cached entries and trigger an immediate fresh scan across your cloud providers.
+
+---
+
+### Firebase Realtime Database Metadata Sync
+
+While Snapshot Injection dynamically provides in-memory restore entries, you can also permanently persist discovered and reconstructed metadata to your private Firebase Realtime Database using the **Sync Metadata to Custom Firebase** feature:
+
+- **Native `cloud_v1` Structure**: The sync engine writes directly to Swift Backup's official RTDB schema:
+  ```
+  /users/<UID>/cloud_v1/<provider_key>/tags/<device_tag>/apps/<sanitized_pkg>/<backup_id>
+  /users/<UID>/cloud_v1/<provider_key>/tags/<device_tag>/folders/<folder_id>
+  ```
+  _(where `<provider_key>` is resolved in the format `<provider> (<sanitized_email>)`)_.
+- **Smart Deduplication**: Before writing, the sync engine queries your existing RTDB `cloud_v1` tree to skip existing records and avoid redundant write operations.
+- **Token Resolution & Authentication**: Automatically resolves Firebase Auth ID tokens from Swift Backup's OAuth session or exchanged refresh tokens, ensuring secure authenticated database writes.
+- **Legacy Cleanup**: Automatically purges any obsolete `/users/<UID>/backups` node left over from older implementations.
+- **Sync Now Button**: Tap the **Sync Now** button inside the Cloud Discovery tab to trigger an immediate full sync of all local and cloud metadata records.
 
 ---
 
@@ -541,17 +678,17 @@ Join the official Telegram group for discussion, support, release updates, and a
 </details>
 
 <details>
-<summary><b>Q: How do I use the Experimental Features &amp; Backup Hub?</b></summary>
-<p>SwiftBackupPrem includes a unified <b>Experimental Features &amp; Backup Hub</b> (accessible via the main screen card or Top Menu &gt; Experimental &amp; Migrator):</p>
+<summary><b>Q: How do I access and use the Backup Migration Hub?</b></summary>
+<p>SwiftBackupPrem includes a built-in <b>Backup Migration Hub</b> (accessible via the <b>Backup Migration</b> card on the main screen by tapping <b>Open Migrator</b>):</p>
 <ul>
-  <li><b>Local Migration Tab:</b> Decrypts full backup folders with your old Firebase UID, rebuilds missing metadata, supports 3 destination modes (Shared Anonymous User, Custom Firebase UID, or Unencrypted Backups), and offers an option to sync reconstructed metadata directly to your private Firebase Realtime Database.</li>
-  <li><b>Cloud Discovery &amp; Injection Tab:</b> Granular switches for:
+  <li><b>Local Migration Tab:</b> Decrypts existing backup folders with your source Firebase UID, rebuilds missing metadata, supports 3 destination encryption modes (Shared Anonymous Key, Custom Firebase UID, or Unencrypted Backups with optional portable extraction), and re-encrypts or extracts them for offline or new account restore.</li>
+  <li><b>Cloud Discovery &amp; Injection Tab:</b> Provides granular controls for:
     <ul>
-      <li><b>Google Drive Full OAuth Scope Expansion:</b> Requests full <code>auth/drive</code> scope during sign-in to see all existing Google Drive backups.</li>
-      <li><b>Universal Cloud Discovery &amp; Restore:</b> Scans and indexes backups across Google Drive, WebDAV, S3, Dropbox, OneDrive, Box &amp; pCloud.</li>
-      <li><b>Firebase Realtime Database Snapshot Injection:</b> Injects discovered cloud backups into restore queries on the fly.</li>
-      <li><b>Automatic Local Metadata Reconstruction:</b> Repairs missing <code>.xml</code> and folder <code>metadata.json</code> on local storage.</li>
-      <li><b>Sync Reconstructed Metadata to Custom Firebase:</b> Directly pushes all reconstructed local and discovered cloud backup metadata to your private Firebase Realtime Database.</li>
+      <li><b>Google Drive Full OAuth Scope:</b> Dynamically expands OAuth scopes to <code>auth/drive</code> to discover backups created across accounts or past ROMs.</li>
+      <li><b>Universal Cloud Discovery:</b> Scans and indexes backups across Google Drive, OneDrive, Dropbox, Box, pCloud, S3, and WebDAV / Nextcloud.</li>
+      <li><b>Realtime DB Snapshot Injection:</b> Injects discovered cloud backups directly into Swift Backup restore lists on the fly via synthetic DataSnapshots.</li>
+      <li><b>Sync Metadata to Custom Firebase:</b> Pushes reconstructed local and discovered cloud backup metadata directly into your private Firebase Realtime Database (<code>cloud_v1</code> hierarchy).</li>
+      <li><b>Cloud Discovery Cache:</b> Manages the local discovery cache for fast offline access, with a 1-tap Clear Cache button.</li>
     </ul>
   </li>
 </ul>

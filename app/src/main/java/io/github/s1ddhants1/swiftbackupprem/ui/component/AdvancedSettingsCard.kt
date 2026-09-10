@@ -75,15 +75,53 @@ fun AdvancedSettingsCard(
                     val isCustomFirebaseEnabled = prefs.customFirebaseApp
 
                     SettingsSwitch(
+                        label = stringResource(R.string.pref_unlock_local_cloud_features_title),
+                        secondaryLabel = stringResource(R.string.pref_unlock_local_cloud_features_desc),
+                        pref = prefs.unlockLocalCloudFeatures,
+                        enabled = true,
+                        onPrefChange = { prefs.unlockLocalCloudFeatures = it }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    val canUseCloudDiscovery = isCustomFirebaseEnabled || prefs.unlockLocalCloudFeatures
+
+                    SettingsSwitch(
                         label = stringResource(R.string.pref_enable_drive_discovery_title),
-                        secondaryLabel = if (isCustomFirebaseEnabled) {
+                        secondaryLabel = if (canUseCloudDiscovery) {
                             stringResource(R.string.pref_enable_drive_discovery_subtitle)
                         } else {
                             stringResource(R.string.pref_enable_drive_discovery_requires_custom_firebase)
                         },
-                        pref = if (isCustomFirebaseEnabled) prefs.enableCloudDiscovery else false,
-                        enabled = isCustomFirebaseEnabled,
-                        onPrefChange = { prefs.enableCloudDiscovery = it }
+                        pref = if (canUseCloudDiscovery) prefs.enableCloudDiscovery else false,
+                        enabled = canUseCloudDiscovery,
+                        onPrefChange = {
+                            prefs.enableCloudDiscovery = it
+                            if (!it) {
+                                prefs.enableSnapshotInjection = false
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    val isCloudDiscoveryActive = canUseCloudDiscovery && prefs.enableCloudDiscovery
+                    SettingsSwitch(
+                        label = stringResource(R.string.pref_snapshot_injection_title),
+                        secondaryLabel = when {
+                            !canUseCloudDiscovery -> stringResource(R.string.pref_enable_drive_discovery_requires_custom_firebase)
+                            !prefs.enableCloudDiscovery -> stringResource(R.string.pref_snapshot_injection_requires_discovery)
+                            else -> stringResource(R.string.pref_snapshot_injection_desc)
+                        },
+                        pref = if (isCloudDiscoveryActive) prefs.enableSnapshotInjection else false,
+                        enabled = isCloudDiscoveryActive,
+                        onPrefChange = { prefs.enableSnapshotInjection = it }
                     )
                 }
             }

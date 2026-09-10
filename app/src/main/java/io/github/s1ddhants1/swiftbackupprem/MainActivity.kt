@@ -313,6 +313,8 @@ private fun SettingsScreenContent(
             }
         }
 
+        AdvancedSettingsCard(prefs = prefs)
+
         // Backup Migration Card
         OutlinedCard(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),

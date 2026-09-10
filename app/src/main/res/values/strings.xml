@@ -156,7 +156,6 @@
     <string name="pref_sync_metadata_firebase_desc">Syncs reconstructed metadata to your Firebase instance</string>
     <string name="pref_rtdb_not_configured">Firebase Database URL not configured</string>
     <string name="pref_rtdb_requires_config">Requires Firebase Database URL in setup</string>
-
     <string name="btn_sync_all_firebase">Sync Now</string>
     <string name="msg_sync_firebase_started">Syncing metadata to Custom Firebase...</string>
     <string name="msg_sync_firebase_success">Synced %1$d metadata records to Custom Firebase</string>
@@ -165,4 +164,7 @@
     <string name="cloud_cache_desc">Local cache for instant offline navigation</string>
     <string name="btn_clear_cloud_cache">Clear Cloud Cache</string>
     <string name="msg_cloud_cache_cleared">Cloud discovery cache cleared</string>
+
+    <string name="pref_unlock_local_cloud_features_title">Unlock Cloud Features for Local Accounts</string>
+    <string name="pref_unlock_local_cloud_features_desc">Enables WebDAV, Nextcloud, S3, and cloud backup features for local/anonymous accounts without Firebase RTDB</string>
 </resources>
