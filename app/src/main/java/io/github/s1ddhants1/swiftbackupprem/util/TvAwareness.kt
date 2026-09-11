@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -24,9 +25,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun rememberIsTvDevice(): Boolean {
     val context = LocalContext.current
-    return remember {
+    val configuration = LocalConfiguration.current
+    return remember(context, configuration) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
-                context.resources.configuration.uiMode and
+                configuration.uiMode and
                 Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
     }
 }
