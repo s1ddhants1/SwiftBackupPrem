@@ -60,12 +60,14 @@ object LocalCloudUnlockHook : HookHandler {
         prefs: PreferencesManager
     ) {
         val watcherClassName = targets.firebaseWatcherClass?.name
-        // 1. Standard FirebaseUser public SDK class or Swift Backup's MFirebaseUser
-        val fbUserClasses = listOfNotNull(
+        val userClasses = listOfNotNull(
             loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.anonymous.MFirebaseUser"),
-            loadClassFlexible(classLoader, "com.google.firebase.auth.FirebaseUser")
-        )
-        for (userCls in fbUserClasses) {
+            loadClassFlexible(classLoader, "com.google.firebase.auth.FirebaseUser"),
+            targets.authUserClass,
+            targets.anonUserClass
+        ).distinct()
+
+        for (userCls in userClasses) {
             attempt("hook ${userCls.simpleName}.isAnonymous") {
                 val m = userCls.methods.firstOrNull { it.name == "isAnonymous" && it.parameterCount == 0 }
                     ?: userCls.declaredMethods.firstOrNull { it.name == "isAnonymous" && it.parameterCount == 0 }
@@ -81,27 +83,6 @@ object LocalCloudUnlockHook : HookHandler {
                         chain.proceed()
                     }
                     Log.i(TAG, "[LocalCloudUnlock] Hooked ${userCls.name}.isAnonymous")
-                }
-            }
-        }
-
-        // 2. Custom user classes resolved by DexKit / TargetClassResolver
-        for (userClass in listOfNotNull(targets.authUserClass, targets.anonUserClass)) {
-            attempt("hook isAnonymous on ${userClass.name}") {
-                val m = userClass.methods.firstOrNull { it.name == "isAnonymous" && it.parameterCount == 0 }
-                    ?: userClass.declaredMethods.firstOrNull { it.name == "isAnonymous" && it.parameterCount == 0 }
-                if (m != null) {
-                    module.hookTracked(m, idPrefix = "local-cloud-user-${userClass.simpleName}-is-anonymous").intercept { chain ->
-                        if (prefs.unlockLocalCloudFeatures) {
-                            if (!prefs.customFirebaseApp && shouldSkipIsAnonymousSpoof(watcherClassName)) {
-                                return@intercept chain.proceed()
-                            }
-                            Log.d(TAG, "[LocalCloudUnlock] Intercepted ${userClass.name}.isAnonymous -> false")
-                            return@intercept false
-                        }
-                        chain.proceed()
-                    }
-                    Log.d(TAG, "[LocalCloudUnlock] Hooked ${userClass.name}.isAnonymous")
                 }
             }
         }

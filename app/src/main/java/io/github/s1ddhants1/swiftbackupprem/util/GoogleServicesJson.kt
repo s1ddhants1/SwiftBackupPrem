@@ -10,6 +10,18 @@ object GoogleServicesJson {
         json.optJSONArray("client")?.optJSONObject(0)?.let { client ->
             client.optJSONObject("client_info")?.optString("mobilesdk_app_id")?.takeIf { it.isNotBlank() }?.let { prefs.googleAppId = it }
             client.optJSONArray("api_key")?.optJSONObject(0)?.optString("current_key")?.takeIf { it.isNotBlank() }?.let { prefs.googleApiKey = it }
+            client.optJSONArray("oauth_client")?.let { oauthArray ->
+                for (i in 0 until oauthArray.length()) {
+                    val oc = oauthArray.optJSONObject(i) ?: continue
+                    val type = oc.optInt("client_type", -1)
+                    val pkg = oc.optJSONObject("android_info")?.optString("package_name")
+                    val cId = oc.optString("client_id")
+                    if (cId.isNotBlank() && (type == 1 || pkg == Consts.packageName)) {
+                        prefs.clientId = cId
+                        break
+                    }
+                }
+            }
         }
         json.optJSONObject("project_info")?.let { proj ->
             proj.optString("firebase_url").takeIf { it.isNotBlank() }?.let { prefs.firebaseDatabaseUrl = it }

@@ -5,11 +5,10 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.annotation.Keep
 import io.github.s1ddhants1.swiftbackupprem.Consts
-import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
+import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudHttpHelper.findFirstString
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -34,51 +33,27 @@ object S3Scanner : CloudScanner {
         return !bucket.isNullOrBlank() && !accessKey.isNullOrBlank() && !secretKey.isNullOrBlank()
     }
 
-    private fun resolveBucket(prefs: SharedPreferences): String? {
-        val keys = listOf("s3_bucket", "s3_bucket_name", "s3_bucket_id")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) return v.trim()
-        }
-        return null
-    }
+    private fun resolveBucket(prefs: SharedPreferences): String? =
+        prefs.findFirstString("s3_bucket", "s3_bucket_name", "s3_bucket_id")
 
-    private fun resolveAccessKey(prefs: SharedPreferences): String? {
-        val keys = listOf("s3_access_key", "s3_access_key_id", "s3_key", "s3_api_key")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) return v.trim()
-        }
-        return null
-    }
+    private fun resolveAccessKey(prefs: SharedPreferences): String? =
+        prefs.findFirstString("s3_access_key", "s3_access_key_id", "s3_key", "s3_api_key")
 
-    private fun resolveSecretKey(prefs: SharedPreferences): String? {
-        val keys = listOf("s3_secret_key", "s3_secret_access_key", "s3_secret")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) return v.trim()
-        }
-        return null
-    }
+    private fun resolveSecretKey(prefs: SharedPreferences): String? =
+        prefs.findFirstString("s3_secret_key", "s3_secret_access_key", "s3_secret")
 
     private fun resolveEndpoint(prefs: SharedPreferences): String {
-        val keys = listOf("s3_endpoint", "s3_custom_endpoint", "s3_url", "s3_host")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) {
-                val clean = v.trim()
-                return if (clean.startsWith("http://") || clean.startsWith("https://")) clean else "https://$clean"
-            }
+        val clean = prefs.findFirstString("s3_endpoint", "s3_custom_endpoint", "s3_url", "s3_host")
+        return if (!clean.isNullOrBlank()) {
+            if (clean.startsWith("http://") || clean.startsWith("https://")) clean else "https://$clean"
+        } else {
+            "https://s3.amazonaws.com"
         }
-        return "https://s3.amazonaws.com"
     }
 
     private fun resolveRegion(prefs: SharedPreferences, endpoint: String): String {
-        val keys = listOf("s3_region", "s3_aws_region")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) return v.trim()
-        }
+        val reg = prefs.findFirstString("s3_region", "s3_aws_region")
+        if (!reg.isNullOrBlank()) return reg
         if (endpoint.contains(".r2.cloudflarestorage.com")) return "auto"
         if (endpoint.contains("s3.") && endpoint.contains(".amazonaws.com")) {
             val middle = endpoint.substringAfter("s3.").substringBefore(".amazonaws.com")
@@ -87,16 +62,8 @@ object S3Scanner : CloudScanner {
         return "us-east-1"
     }
 
-    private fun resolvePrefix(prefs: SharedPreferences): String {
-        val keys = listOf("s3_path", "s3_prefix", "s3_folder")
-        for (k in keys) {
-            val v = prefs.getString(k, null)
-            if (!v.isNullOrBlank()) {
-                return v.trim().trimStart('/')
-            }
-        }
-        return ""
-    }
+    private fun resolvePrefix(prefs: SharedPreferences): String =
+        prefs.findFirstString("s3_path", "s3_prefix", "s3_folder")?.trimStart('/') ?: ""
 
     override fun listFiles(context: Context, prefs: SharedPreferences): List<CloudFileItem> {
         val bucket = resolveBucket(prefs) ?: return emptyList()
@@ -243,25 +210,9 @@ object S3Scanner : CloudScanner {
         return Pair(fullUrlStr, headers)
     }
 
-    private fun executeHttp(method: String, urlStr: String, headers: Map<String, String>): String? = attempt("S3 HTTP request", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            connectTimeout = 15000
-            readTimeout = 15000
-        }
-        try {
-            val code = conn.responseCode
-            if (code in 200..299) {
-                conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            } else {
-                Log.w(TAG, "[S3Scanner] S3 HTTP $method error $code for ${AppUtils.sanitizeUrl(urlStr)}")
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
-    }
+    private fun executeHttp(method: String, urlStr: String, headers: Map<String, String>): String? =
+        if (method == "GET") CloudHttpHelper.executeGet(urlStr, headers)
+        else CloudHttpHelper.executePost(urlStr, headers, method = method)
 
     private fun sha256Hex(data: String): String {
         val md = MessageDigest.getInstance("SHA-256")

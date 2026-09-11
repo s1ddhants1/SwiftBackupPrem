@@ -103,88 +103,30 @@ object GoogleDriveScanner : CloudScanner {
         token: String,
         startByte: Long,
         endByte: Long
-    ): ByteArray? = attempt("Drive HTTP GET Range", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            setRequestProperty("Authorization", "Bearer $token")
-            setRequestProperty("Range", "bytes=$startByte-$endByte")
-            connectTimeout = 15000
-            readTimeout = 15000
+    ): ByteArray? = CloudHttpHelper.executeGetRange(
+        urlStr = urlStr,
+        headers = mapOf("Authorization" to "Bearer $token"),
+        startByte = startByte,
+        endByte = endByte,
+        on401Retry = {
+            val fresh = getOrRefreshToken(context, prefs, forceRefresh = true)
+            if (!fresh.isNullOrBlank() && fresh != token) mapOf("Authorization" to "Bearer $fresh") else null
         }
-        try {
-            if (conn.responseCode == 200 || conn.responseCode == 206) {
-                conn.inputStream.use { it.readBytes() }
-            } else if (conn.responseCode == 401) {
-                Log.w(TAG, "[GoogleDriveScanner] 401 on Range GET, attempting token refresh...")
-                val freshToken = getOrRefreshToken(context, prefs, forceRefresh = true)
-                if (!freshToken.isNullOrBlank() && freshToken != token) {
-                    val retryConn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        setRequestProperty("Authorization", "Bearer $freshToken")
-                        setRequestProperty("Range", "bytes=$startByte-$endByte")
-                        connectTimeout = 15000
-                        readTimeout = 15000
-                    }
-                    try {
-                        if (retryConn.responseCode == 200 || retryConn.responseCode == 206) {
-                            return@attempt retryConn.inputStream.use { it.readBytes() }
-                        }
-                    } finally {
-                        retryConn.disconnect()
-                    }
-                }
-                null
-            } else {
-                Log.w(TAG, "[GoogleDriveScanner] HTTP Range GET returned ${conn.responseCode} for ${AppUtils.sanitizeUrl(urlStr)} (bytes=$startByte-$endByte)")
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
-    }
+    )
 
     private fun executeGet(
         context: Context,
         prefs: SharedPreferences,
         urlStr: String,
         token: String
-    ): String? = attempt("Drive HTTP GET", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            setRequestProperty("Authorization", "Bearer $token")
-            connectTimeout = 15000
-            readTimeout = 15000
+    ): String? = CloudHttpHelper.executeGet(
+        urlStr = urlStr,
+        headers = mapOf("Authorization" to "Bearer $token"),
+        on401Retry = {
+            val fresh = getOrRefreshToken(context, prefs, forceRefresh = true)
+            if (!fresh.isNullOrBlank() && fresh != token) mapOf("Authorization" to "Bearer $fresh") else null
         }
-        try {
-            if (conn.responseCode == 200) {
-                conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            } else if (conn.responseCode == 401) {
-                Log.w(TAG, "[GoogleDriveScanner] 401 on GET, attempting token refresh...")
-                val freshToken = getOrRefreshToken(context, prefs, forceRefresh = true)
-                if (!freshToken.isNullOrBlank() && freshToken != token) {
-                    val retryConn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        setRequestProperty("Authorization", "Bearer $freshToken")
-                        connectTimeout = 15000
-                        readTimeout = 15000
-                    }
-                    try {
-                        if (retryConn.responseCode == 200) {
-                            return@attempt retryConn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-                        }
-                    } finally {
-                        retryConn.disconnect()
-                    }
-                }
-                null
-            } else {
-                Log.w(TAG, "[GoogleDriveScanner] HTTP GET returned ${conn.responseCode} for ${AppUtils.sanitizeUrl(urlStr)}")
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
-    }
+    )
 
     override fun uploadFileText(
         context: Context,

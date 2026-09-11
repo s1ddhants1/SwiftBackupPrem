@@ -36,27 +36,37 @@ class SbpConfigTest {
     @Test
     fun isCompleteFirebaseConfigReturnsTrueWhenAllRequiredFieldsPresent() {
         val config = SbpConfig(
-            googleAppId = "1:123:android:456",
-            googleApiKey = "key",
-            firebaseDatabaseUrl = "https://test.firebaseio.com",
-            gcmDefaultSenderId = "123",
-            projectId = "test-project",
-            clientId = "test-client-id"
+            googleAppId = "1:758023045078:android:4dea22835138c6e2ef2e77",
+            googleApiKey = "AIzaSyAw7Q_SSjMMC3_SCkmnYN3S2uXmGqglzlc",
+            firebaseDatabaseUrl = "https://swiftbackup-personal-adead-default-rtdb.firebaseio.com",
+            gcmDefaultSenderId = "758023045078",
+            projectId = "swiftbackup-personal-adead",
+            clientId = "758023045078-7k1rddvuv4r31dh69fm0qpnf183528in.apps.googleusercontent.com"
         )
         assertTrue(config.isCompleteFirebaseConfig)
     }
 
     @Test
-    fun isCompleteFirebaseConfigReturnsFalseWhenAnyRequiredFieldIsBlank() {
-        val config = SbpConfig(
-            googleAppId = "1:123:android:456",
+    fun isCompleteFirebaseConfigReturnsFalseWhenAnyRequiredFieldIsBlankOrInvalid() {
+        val configBlank = SbpConfig(
+            googleAppId = "1:758023045078:android:4dea22835138c6e2ef2e77",
             googleApiKey = "",
-            firebaseDatabaseUrl = "https://test.firebaseio.com",
-            gcmDefaultSenderId = "123",
-            projectId = "test-project",
-            clientId = "test-client-id"
+            firebaseDatabaseUrl = "https://swiftbackup-personal-adead-default-rtdb.firebaseio.com",
+            gcmDefaultSenderId = "758023045078",
+            projectId = "swiftbackup-personal-adead",
+            clientId = "758023045078-7k1rddvuv4r31dh69fm0qpnf183528in.apps.googleusercontent.com"
         )
-        assertFalse(config.isCompleteFirebaseConfig)
+        assertFalse(configBlank.isCompleteFirebaseConfig)
+
+        val configInvalid = SbpConfig(
+            googleAppId = "1:758023045078:android:4dea22835138c6e2ef2e77",
+            googleApiKey = "invalid-key",
+            firebaseDatabaseUrl = "https://swiftbackup-personal-adead-default-rtdb.firebaseio.com",
+            gcmDefaultSenderId = "758023045078",
+            projectId = "swiftbackup-personal-adead",
+            clientId = "758023045078-7k1rddvuv4r31dh69fm0qpnf183528in.apps.googleusercontent.com"
+        )
+        assertFalse(configInvalid.isCompleteFirebaseConfig)
     }
 
     @Test

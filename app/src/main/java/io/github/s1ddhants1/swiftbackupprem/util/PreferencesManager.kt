@@ -74,6 +74,7 @@ class PreferencesManager(
     var syncMetadataToFirebase by booleanPreference("sync_metadata_to_firebase", false)
     var unlockLocalCloudFeatures by booleanPreference("unlock_local_cloud_features", false)
     var customFirebaseApp by booleanPreference("custom_firebase_app")
+    var firebaseSetupFinished by booleanPreference("firebase_setup_finished", false)
 
     fun toConfig(): SbpConfig = SbpConfig(
         enablePremium = enablePremium,

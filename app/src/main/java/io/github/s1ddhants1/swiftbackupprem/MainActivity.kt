@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
             val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
                 if (uri != null) viewModel.exportConfig(contentResolver, uri, prefs)
             }
-            val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) viewModel.importConfig(contentResolver, uri, prefs)
             }
 
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.menu_import_config)) },
-                                            onClick = { showMenu = false; importLauncher.launch("application/json") },
+                                            onClick = { showMenu = false; importLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
                                             leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) }
                                         )
                                         DropdownMenuItem(

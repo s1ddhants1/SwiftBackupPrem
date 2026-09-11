@@ -20,6 +20,7 @@ class PreferencesManagerTest {
         assertFalse(prefs.syncMetadataToFirebase)
         assertFalse(prefs.unlockLocalCloudFeatures)
         assertFalse(prefs.customFirebaseApp)
+        assertFalse(prefs.firebaseSetupFinished)
         assertEquals("", prefs.googleAppId)
         assertEquals("", prefs.googleApiKey)
         assertEquals("", prefs.firebaseDatabaseUrl)
@@ -37,6 +38,7 @@ class PreferencesManagerTest {
         prefs.disableTelemetry = false
         prefs.unlockLocalCloudFeatures = true
         prefs.customFirebaseApp = true
+        prefs.firebaseSetupFinished = true
         prefs.googleAppId = "test-app-id"
         prefs.googleApiKey = "test-api-key"
         prefs.firebaseDatabaseUrl = "https://test.firebaseio.com"
@@ -49,6 +51,7 @@ class PreferencesManagerTest {
         assertFalse(prefs.disableTelemetry)
         assertTrue(prefs.unlockLocalCloudFeatures)
         assertTrue(prefs.customFirebaseApp)
+        assertTrue(prefs.firebaseSetupFinished)
         assertEquals("test-app-id", prefs.googleAppId)
         assertEquals("test-api-key", prefs.googleApiKey)
         assertEquals("https://test.firebaseio.com", prefs.firebaseDatabaseUrl)

@@ -263,90 +263,32 @@ object OneDriveScanner : CloudScanner {
         token: String?,
         startByte: Long,
         endByte: Long
-    ): ByteArray? = attempt("OneDrive HTTP GET Range", silent = true) {
-        var currentUrl = urlStr
-        var currentToken = token
-        var redirectCount = 0
-        val maxRedirects = 5
-
-        while (redirectCount < maxRedirects) {
-            val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                requestMethod = "GET"
-                if (!currentToken.isNullOrBlank()) {
-                    setRequestProperty("Authorization", "Bearer $currentToken")
-                }
-                setRequestProperty("Range", "bytes=$startByte-$endByte")
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-
-            try {
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    return@attempt conn.inputStream.use { it.readBytes() }
-                } else if (code in listOf(301, 302, 303, 307, 308)) {
-                    val location = conn.getHeaderField("Location")
-                    if (!location.isNullOrBlank()) {
-                        currentUrl = location
-                        // Drop MS Graph bearer token when redirected to Azure storage/CDN
-                        if (location.contains("blob.core.windows.net") || location.contains("1drv.ms") || !location.contains("graph.microsoft.com")) {
-                            currentToken = null
-                        }
-                        redirectCount++
-                        continue
-                    }
-                }
-                Log.w(TAG, "[OneDriveScanner] HTTP Range GET returned $code for ${AppUtils.sanitizeUrl(currentUrl)} (bytes=$startByte-$endByte)")
-                return@attempt null
-            } finally {
-                conn.disconnect()
+    ): ByteArray? = CloudHttpHelper.executeGetRange(
+        urlStr = urlStr,
+        headers = token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap(),
+        startByte = startByte,
+        endByte = endByte,
+        onAuthRedirect = { loc ->
+            if (loc.contains("blob.core.windows.net") || loc.contains("1drv.ms") || !loc.contains("graph.microsoft.com")) {
+                emptyMap()
+            } else {
+                token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
             }
         }
-        null
-    }
+    )
 
     private fun executeGet(
         urlStr: String,
         token: String?
-    ): String? = attempt("OneDrive HTTP GET", silent = true) {
-        var currentUrl = urlStr
-        var currentToken = token
-        var redirectCount = 0
-        val maxRedirects = 5
-
-        while (redirectCount < maxRedirects) {
-            val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                requestMethod = "GET"
-                if (!currentToken.isNullOrBlank()) {
-                    setRequestProperty("Authorization", "Bearer $currentToken")
-                }
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-
-            try {
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    return@attempt conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-                } else if (code in listOf(301, 302, 303, 307, 308)) {
-                    val location = conn.getHeaderField("Location")
-                    if (!location.isNullOrBlank()) {
-                        currentUrl = location
-                        if (location.contains("blob.core.windows.net") || location.contains("1drv.ms") || !location.contains("graph.microsoft.com")) {
-                            currentToken = null
-                        }
-                        redirectCount++
-                        continue
-                    }
-                }
-                Log.w(TAG, "[OneDriveScanner] HTTP GET returned $code for ${AppUtils.sanitizeUrl(currentUrl)}")
-                return@attempt null
-            } finally {
-                conn.disconnect()
+    ): String? = CloudHttpHelper.executeGet(
+        urlStr = urlStr,
+        headers = token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap(),
+        onAuthRedirect = { loc ->
+            if (loc.contains("blob.core.windows.net") || loc.contains("1drv.ms") || !loc.contains("graph.microsoft.com")) {
+                emptyMap()
+            } else {
+                token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
             }
         }
-        null
-    }
+    )
 }

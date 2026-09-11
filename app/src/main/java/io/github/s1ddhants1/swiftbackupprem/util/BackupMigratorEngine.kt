@@ -402,22 +402,7 @@ object BackupMigratorEngine {
             // 4. Copy & decrypt data slices (.app, .apk, .splits, .dat, .extdat, .med)
             files.forEach { file ->
                 if (!file.name.endsWith(".xml") && !file.name.endsWith(".extra")) {
-                    val destFileName = if (isPortable) {
-                        when {
-                            file.name.endsWith(".app") || file.name.endsWith(".apk") -> "$pkgName.apk"
-                            file.name.endsWith(".splits") -> "${pkgName}_splits.tar"
-                            file.name.endsWith(".dat") -> "${pkgName}_data.tar"
-                            file.name.endsWith(".extdat") -> "${pkgName}_external_data.tar"
-                            file.name.endsWith(".med") -> "${pkgName}_media.tar"
-                            file.name.endsWith(".cls") -> "${pkgName}_call_logs.json"
-                            file.name.endsWith(".msg") -> "${pkgName}_sms_messages.json"
-                            file.name.endsWith(".wfi") -> "${pkgName}_wifi.json"
-                            file.name.endsWith(".wal") -> "${pkgName}_wallpaper.png"
-                            else -> file.name
-                        }
-                    } else {
-                        file.name
-                    }
+                    val destFileName = if (isPortable) resolvePortableFileName(pkgName, file.name) else file.name
                     val destFile = File(destBackupDir, destFileName)
                     if (targetUid == null && (file.name.endsWith(".dat") || file.name.endsWith(".extdat") || file.name.endsWith(".med"))) {
                         try {
@@ -455,17 +440,7 @@ object BackupMigratorEngine {
                 )
 
                 sliceDefinitions.forEach { (suffix, dateKey, sizeKey) ->
-                    val checkFileName = if (isPortable) {
-                        when (suffix) {
-                            "app" -> "$pkgName.apk"
-                            "dat" -> "${pkgName}_data.tar"
-                            "extdat" -> "${pkgName}_external_data.tar"
-                            "med" -> "${pkgName}_media.tar"
-                            else -> "$pkgName.$suffix"
-                        }
-                    } else {
-                        "$pkgName.$suffix"
-                    }
+                    val checkFileName = if (isPortable) resolvePortableFileName(pkgName, "$pkgName.$suffix") else "$pkgName.$suffix"
                     val sliceFile = File(destBackupDir, checkFileName)
                     if (sliceFile.exists()) {
                         if (!has(dateKey)) put(dateKey, now)
@@ -486,7 +461,7 @@ object BackupMigratorEngine {
                     }
                 }
 
-                val splitsFileName = if (isPortable) "${pkgName}_splits.tar" else "$pkgName.splits"
+                val splitsFileName = if (isPortable) resolvePortableFileName(pkgName, "$pkgName.splits") else "$pkgName.splits"
                 val splitsFile = File(destBackupDir, splitsFileName)
                 if (splitsFile.exists()) {
                     put("splitsBackupSize", splitsFile.length())
@@ -662,6 +637,19 @@ object BackupMigratorEngine {
             error(err)
             return false
         }
+    }
+
+    private fun resolvePortableFileName(pkgName: String, fileName: String): String = when {
+        fileName.endsWith(".app") || fileName.endsWith(".apk") -> "$pkgName.apk"
+        fileName.endsWith(".splits") -> "${pkgName}_splits.tar"
+        fileName.endsWith(".dat") -> "${pkgName}_data.tar"
+        fileName.endsWith(".extdat") -> "${pkgName}_external_data.tar"
+        fileName.endsWith(".med") -> "${pkgName}_media.tar"
+        fileName.endsWith(".cls") -> "${pkgName}_call_logs.json"
+        fileName.endsWith(".msg") -> "${pkgName}_sms_messages.json"
+        fileName.endsWith(".wfi") -> "${pkgName}_wifi.json"
+        fileName.endsWith(".wal") -> "${pkgName}_wallpaper.png"
+        else -> fileName
     }
 }
 

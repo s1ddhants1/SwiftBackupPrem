@@ -186,7 +186,7 @@ object WebDavScanner : CloudScanner {
     override fun downloadFileText(context: Context, prefs: SharedPreferences, fileItem: CloudFileItem): String? {
         val authHeader = resolveAuthHeader(prefs)
         val downloadUrl = fileItem.customDownloadUrl ?: fileItem.id
-        return executeGet(downloadUrl, authHeader)
+        return CloudHttpHelper.executeGet(downloadUrl, authHeader?.let { mapOf("Authorization" to it) } ?: emptyMap())
     }
 
     override fun downloadByteRange(
@@ -198,75 +198,21 @@ object WebDavScanner : CloudScanner {
     ): ByteArray? {
         val authHeader = resolveAuthHeader(prefs)
         val downloadUrl = fileItem.customDownloadUrl ?: fileItem.id
-        return executeGetRange(downloadUrl, authHeader, startByte, endByte)
+        return CloudHttpHelper.executeGetRange(
+            downloadUrl,
+            authHeader?.let { mapOf("Authorization" to it) } ?: emptyMap(),
+            startByte,
+            endByte
+        )
     }
 
-    private fun executeGetRange(urlStr: String, authHeader: String?, startByte: Long, endByte: Long): ByteArray? = attempt("WebDAV GET Range", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            if (!authHeader.isNullOrBlank()) {
-                setRequestProperty("Authorization", authHeader)
-            }
-            setRequestProperty("Range", "bytes=$startByte-$endByte")
-            connectTimeout = 15000
-            readTimeout = 15000
-        }
-        try {
-            if (conn.responseCode == 200 || conn.responseCode == 206) {
-                conn.inputStream.use { it.readBytes() }
-            } else {
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    private fun executePropfind(urlStr: String, authHeader: String?): String? = attempt("WebDAV PROPFIND", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = "PROPFIND"
-            setRequestProperty("Depth", "1")
-            setRequestProperty("Content-Type", "application/xml; charset=utf-8")
-            if (!authHeader.isNullOrBlank()) {
-                setRequestProperty("Authorization", authHeader)
-            }
-            doOutput = true
-            connectTimeout = 15000
-            readTimeout = 15000
-        }
-        try {
-            conn.outputStream.use { it.write(PROPFIND_XML.toByteArray(StandardCharsets.UTF_8)) }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            } else {
-                Log.w(TAG, "[WebDavScanner] PROPFIND returned $code for ${AppUtils.sanitizeUrl(urlStr)}")
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    private fun executeGet(urlStr: String, authHeader: String?): String? = attempt("WebDAV GET", silent = true) {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            if (!authHeader.isNullOrBlank()) {
-                setRequestProperty("Authorization", authHeader)
-            }
-            connectTimeout = 15000
-            readTimeout = 15000
-        }
-        try {
-            if (conn.responseCode == 200) {
-                conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            } else {
-                Log.w(TAG, "[WebDavScanner] HTTP GET returned ${conn.responseCode} for ${AppUtils.sanitizeUrl(urlStr)}")
-                null
-            }
-        } finally {
-            conn.disconnect()
-        }
+    private fun executePropfind(urlStr: String, authHeader: String?): String? {
+        val headers = mutableMapOf(
+            "Depth" to "1",
+            "Content-Type" to "application/xml; charset=utf-8"
+        )
+        if (!authHeader.isNullOrBlank()) headers["Authorization"] = authHeader
+        return CloudHttpHelper.executePost(urlStr, headers, PROPFIND_XML.toByteArray(StandardCharsets.UTF_8), method = "PROPFIND")
     }
 
     override fun uploadFileText(

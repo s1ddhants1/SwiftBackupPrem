@@ -840,7 +840,7 @@ object CloudDiscoveryHook : HookHandler {
 
     fun findMatchingBackups(key: String): List<DiscoveredCloudApp> {
         discoveredBackups[key]?.let { if (it.isNotEmpty()) return it }
-        val matchingPackage = discoveredBackups.keys().toList().firstOrNull {
+        val matchingPackage = discoveredBackups.keys.firstOrNull {
             it == key || it.replace(".", "") == key
         }
         if (matchingPackage != null) {
@@ -915,38 +915,18 @@ object CloudDiscoveryHook : HookHandler {
                     }
                 }
 
-                root.optJSONObject("folders")?.let { foldersObj ->
-                    foldersObj.keys().forEach { fid ->
-                        val fJson = foldersObj.optJSONObject(fid)
-                        if (fJson != null) {
-                            discoveredFolders[fid] = DiscoveredCloudFolder.fromJson(fid, fJson)
-                        }
+                root.optJSONObject("folders")?.let { obj ->
+                    obj.keys().forEach { fid -> obj.optJSONObject(fid)?.let { discoveredFolders[fid] = DiscoveredCloudFolder.fromJson(fid, it) } }
+                }
+                fun <T> loadSection(key: String, map: MutableMap<String, T>, parser: (JSONObject) -> T) {
+                    root.optJSONObject(key)?.let { obj ->
+                        obj.keys().forEach { id -> obj.optJSONObject(id)?.let { map[id] = parser(it) } }
                     }
                 }
-
-                root.optJSONObject("calls")?.let { callsObj ->
-                    callsObj.keys().forEach { id ->
-                        callsObj.optJSONObject(id)?.let { discoveredCalls[id] = DiscoveredCloudCall.fromJson(it) }
-                    }
-                }
-
-                root.optJSONObject("sms")?.let { smsObj ->
-                    smsObj.keys().forEach { id ->
-                        smsObj.optJSONObject(id)?.let { discoveredSms[id] = DiscoveredCloudSms.fromJson(it) }
-                    }
-                }
-
-                root.optJSONObject("walls")?.let { wallsObj ->
-                    wallsObj.keys().forEach { id ->
-                        wallsObj.optJSONObject(id)?.let { discoveredWalls[id] = DiscoveredCloudWall.fromJson(it) }
-                    }
-                }
-
-                root.optJSONObject("wifi")?.let { wifiObj ->
-                    wifiObj.keys().forEach { id ->
-                        wifiObj.optJSONObject(id)?.let { discoveredWifi[id] = DiscoveredCloudWifi.fromJson(it) }
-                    }
-                }
+                loadSection("calls", discoveredCalls, DiscoveredCloudCall::fromJson)
+                loadSection("sms", discoveredSms, DiscoveredCloudSms::fromJson)
+                loadSection("walls", discoveredWalls, DiscoveredCloudWall::fromJson)
+                loadSection("wifi", discoveredWifi, DiscoveredCloudWifi::fromJson)
 
                 val allAppsCount = getAllDiscoveredApps().size
                 lastScanTime = fileToRead.lastModified()
@@ -968,25 +948,16 @@ object CloudDiscoveryHook : HookHandler {
             }
             root.put("apps", appsObj)
 
-            val foldersObj = JSONObject()
-            discoveredFolders.forEach { (fid, folder) -> foldersObj.put(fid, folder.toJson()) }
-            root.put("folders", foldersObj)
-
-            val callsObj = JSONObject()
-            discoveredCalls.forEach { (id, call) -> callsObj.put(id, call.toJson()) }
-            root.put("calls", callsObj)
-
-            val smsObj = JSONObject()
-            discoveredSms.forEach { (id, s) -> smsObj.put(id, s.toJson()) }
-            root.put("sms", smsObj)
-
-            val wallsObj = JSONObject()
-            discoveredWalls.forEach { (id, w) -> wallsObj.put(id, w.toJson()) }
-            root.put("walls", wallsObj)
-
-            val wifiObj = JSONObject()
-            discoveredWifi.forEach { (id, w) -> wifiObj.put(id, w.toJson()) }
-            root.put("wifi", wifiObj)
+            fun <T> putSection(key: String, map: Map<String, T>, serializer: (T) -> JSONObject) {
+                val obj = JSONObject()
+                map.forEach { (k, v) -> obj.put(k, serializer(v)) }
+                root.put(key, obj)
+            }
+            putSection("folders", discoveredFolders) { it.toJson() }
+            putSection("calls", discoveredCalls) { it.toJson() }
+            putSection("sms", discoveredSms) { it.toJson() }
+            putSection("walls", discoveredWalls) { it.toJson() }
+            putSection("wifi", discoveredWifi) { it.toJson() }
 
             val jsonStr = root.toString(2)
             val cacheFile = getCanonicalCacheFile()
@@ -1198,14 +1169,13 @@ object CloudDiscoveryHook : HookHandler {
                     discoveredCalls[fileId] = DiscoveredCloudCall(fileId, fileName, fileSize, count, tag, ts, providerName)
                     totalIndexedCount++
                     continue
-                } else {
-                    val callFbMatcher = callFallbackRegex.matcher(fileName)
-                    if (callFbMatcher.matches()) {
-                        val tag = callFbMatcher.group(1) ?: deviceTag
-                        discoveredCalls[fileId] = DiscoveredCloudCall(fileId, fileName, fileSize, 1, tag, fileObj.timestamp, providerName)
-                        totalIndexedCount++
-                        continue
-                    }
+                }
+                val callFbMatcher = callFallbackRegex.matcher(fileName)
+                if (callFbMatcher.matches()) {
+                    val tag = callFbMatcher.group(1) ?: deviceTag
+                    discoveredCalls[fileId] = DiscoveredCloudCall(fileId, fileName, fileSize, 1, tag, fileObj.timestamp, providerName)
+                    totalIndexedCount++
+                    continue
                 }
 
                 val smsMatcher = smsRegex.matcher(fileName)
@@ -1216,14 +1186,13 @@ object CloudDiscoveryHook : HookHandler {
                     discoveredSms[fileId] = DiscoveredCloudSms(fileId, fileName, fileSize, totalCount, tag, ts, providerName)
                     totalIndexedCount++
                     continue
-                } else {
-                    val smsFbMatcher = smsFallbackRegex.matcher(fileName)
-                    if (smsFbMatcher.matches()) {
-                        val tag = smsFbMatcher.group(1) ?: deviceTag
-                        discoveredSms[fileId] = DiscoveredCloudSms(fileId, fileName, fileSize, 1, tag, fileObj.timestamp, providerName)
-                        totalIndexedCount++
-                        continue
-                    }
+                }
+                val smsFbMatcher = smsFallbackRegex.matcher(fileName)
+                if (smsFbMatcher.matches()) {
+                    val tag = smsFbMatcher.group(1) ?: deviceTag
+                    discoveredSms[fileId] = DiscoveredCloudSms(fileId, fileName, fileSize, 1, tag, fileObj.timestamp, providerName)
+                    totalIndexedCount++
+                    continue
                 }
 
                 val wallMatcher = wallRegex.matcher(fileName)

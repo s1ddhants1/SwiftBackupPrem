@@ -23,7 +23,8 @@ fun WizardProgressHeader(currentStep: Int, totalSteps: Int = TOTAL_WIZARD_STEPS)
         2 -> Icons.Default.Storage
         3 -> Icons.Default.Lock
         4 -> Icons.Default.VpnKey
-        5 -> Icons.Default.TaskAlt
+        5 -> Icons.Default.CloudSync
+        6 -> Icons.Default.TaskAlt
         else -> Icons.Default.Tune
     }
     val animatedProgress by animateFloatAsState(

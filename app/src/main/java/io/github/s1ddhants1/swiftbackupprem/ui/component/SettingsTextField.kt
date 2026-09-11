@@ -8,9 +8,10 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,10 +36,22 @@ fun SettingsTextField(
     onPrefChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Ascii,
-    imeAction: ImeAction = ImeAction.Next
+    imeAction: ImeAction = ImeAction.Next,
+    showStatusIcon: Boolean = false,
+    isRequired: Boolean = true,
+    validator: ((String) -> Boolean)? = null
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val coroutineScope = rememberCoroutineScope()
+
+    val isBlank = pref.isBlank()
+    val isValid = remember(pref, validator, isRequired) {
+        if (validator != null) {
+            if (isBlank) !isRequired else validator(pref.trim())
+        } else {
+            !isRequired || !isBlank
+        }
+    }
 
     OutlinedTextField(
         modifier = modifier
@@ -63,15 +76,27 @@ fun SettingsTextField(
             keyboardType = keyboardType,
             imeAction = imeAction
         ),
-        trailingIcon = if (pref.isNotBlank()) {
+        trailingIcon = if (showStatusIcon && (isRequired || pref.isNotBlank())) {
             {
-                IconButton(onClick = { onPrefChange("") }) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = stringResource(R.string.cd_clear_input),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = if (isValid) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.ErrorOutline
+                    },
+                    contentDescription = stringResource(
+                        if (isValid) R.string.wizard_status_ok
+                        else R.string.wizard_status_missing
+                    ),
+                    tint = if (isValid) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(20.dp)
+                )
             }
         } else null
     )

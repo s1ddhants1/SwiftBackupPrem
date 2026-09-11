@@ -73,4 +73,25 @@ object AppUtils {
             urlStr.replace(Regex("(?i)(auth|token|access_token|key|secret|password|signature)=([^&\\s]+)"), "$1=***")
         }
     }
+
+    fun resolvePathFromTreeUri(uri: Uri): String {
+        return try {
+            val docId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+            val split = docId.split(":")
+            val type = split[0]
+            val relPath = if (split.size > 1) split[1] else ""
+            if ("primary".equals(type, ignoreCase = true)) {
+                if (relPath.isNotBlank()) "/storage/emulated/0/$relPath" else "/storage/emulated/0"
+            } else {
+                "/storage/$type/$relPath"
+            }
+        } catch (_: Exception) {
+            val raw = uri.path ?: uri.toString()
+            val decoded = Uri.decode(raw)
+            if (decoded.contains(":")) {
+                val rel = decoded.substringAfter(":")
+                if (decoded.contains("primary")) "/storage/emulated/0/$rel" else "/storage/$rel"
+            } else decoded
+        }
+    }
 }
