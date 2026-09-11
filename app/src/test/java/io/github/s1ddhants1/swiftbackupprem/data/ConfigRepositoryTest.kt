@@ -173,6 +173,23 @@ class ConfigRepositoryTest {
         assertTrue(prefs.enableCloudDiscovery)
     }
 
+    @Test
+    fun parseConfigParsesLocalAccountCustomUid() {
+        val prefs = PreferencesManager(null)
+        val json = """
+            {
+              "unlockLocalCloudFeatures": true,
+              "localAccountCustomUid": "test-custom-uid-xyz"
+            }
+        """.trimIndent()
+
+        val result = repository.parseConfig(json, prefs)
+
+        assertTrue(result.unlockLocalCloudFeatures)
+        assertEquals("test-custom-uid-xyz", result.localAccountCustomUid)
+        assertEquals("test-custom-uid-xyz", prefs.localAccountCustomUid)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun parseConfigRejectsInvalidJsonStructure() {
         val prefs = PreferencesManager(null)

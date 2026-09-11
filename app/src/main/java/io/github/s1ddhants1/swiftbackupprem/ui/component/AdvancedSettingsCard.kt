@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.s1ddhants1.swiftbackupprem.R
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
@@ -72,57 +73,46 @@ fun AdvancedSettingsCard(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                    val isCustomFirebaseEnabled = prefs.customFirebaseApp
-
                     SettingsSwitch(
                         label = stringResource(R.string.pref_unlock_local_cloud_features_title),
                         secondaryLabel = stringResource(R.string.pref_unlock_local_cloud_features_desc),
                         pref = prefs.unlockLocalCloudFeatures,
                         enabled = true,
-                        onPrefChange = { prefs.unlockLocalCloudFeatures = it }
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-
-                    val canUseCloudDiscovery = isCustomFirebaseEnabled || prefs.unlockLocalCloudFeatures
-
-                    SettingsSwitch(
-                        label = stringResource(R.string.pref_enable_drive_discovery_title),
-                        secondaryLabel = if (canUseCloudDiscovery) {
-                            stringResource(R.string.pref_enable_drive_discovery_subtitle)
-                        } else {
-                            stringResource(R.string.pref_enable_drive_discovery_requires_custom_firebase)
-                        },
-                        pref = if (canUseCloudDiscovery) prefs.enableCloudDiscovery else false,
-                        enabled = canUseCloudDiscovery,
                         onPrefChange = {
-                            prefs.enableCloudDiscovery = it
-                            if (!it) {
-                                prefs.enableSnapshotInjection = false
+                            prefs.unlockLocalCloudFeatures = it
+                            if (it) {
+                                prefs.enableCloudDiscovery = true
+                                prefs.enableSnapshotInjection = true
                             }
                         }
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-
-                    val isCloudDiscoveryActive = canUseCloudDiscovery && prefs.enableCloudDiscovery
-                    SettingsSwitch(
-                        label = stringResource(R.string.pref_snapshot_injection_title),
-                        secondaryLabel = when {
-                            !canUseCloudDiscovery -> stringResource(R.string.pref_enable_drive_discovery_requires_custom_firebase)
-                            !prefs.enableCloudDiscovery -> stringResource(R.string.pref_snapshot_injection_requires_discovery)
-                            else -> stringResource(R.string.pref_snapshot_injection_desc)
-                        },
-                        pref = if (isCloudDiscoveryActive) prefs.enableSnapshotInjection else false,
-                        enabled = isCloudDiscoveryActive,
-                        onPrefChange = { prefs.enableSnapshotInjection = it }
-                    )
+                    AnimatedVisibility(
+                        visible = prefs.unlockLocalCloudFeatures,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            SettingsTextField(
+                                label = stringResource(R.string.pref_local_account_custom_uid_title),
+                                pref = prefs.localAccountCustomUid,
+                                onPrefChange = { prefs.localAccountCustomUid = it.trim() },
+                                isRequired = false,
+                                showStatusIcon = false,
+                                imeAction = ImeAction.Done
+                            )
+                            Text(
+                                text = stringResource(R.string.pref_local_account_custom_uid_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

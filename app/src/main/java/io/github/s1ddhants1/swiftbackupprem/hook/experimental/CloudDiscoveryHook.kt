@@ -764,7 +764,7 @@ object CloudDiscoveryHook : HookHandler {
     ) {
         appContext = context.applicationContext ?: context
         preferences = prefs
-        val canDiscover = (prefs.customFirebaseApp || prefs.unlockLocalCloudFeatures) && prefs.enableCloudDiscovery
+        val canDiscover = prefs.unlockLocalCloudFeatures || (prefs.customFirebaseApp && prefs.enableCloudDiscovery)
         if (!canDiscover) {
             Log.d(TAG, "Cloud Discovery is disabled (requires custom Firebase app or local cloud unlock, and Cloud Discovery enabled)")
             return
@@ -779,13 +779,13 @@ object CloudDiscoveryHook : HookHandler {
     private fun isCloudDiscoveryEnabled(): Boolean {
         val p = preferences ?: return false
         if (p.unlockLocalCloudFeatures) return true
-        return (p.customFirebaseApp || p.unlockLocalCloudFeatures) && p.enableCloudDiscovery
+        return p.customFirebaseApp && p.enableCloudDiscovery
     }
 
     private fun isSnapshotInjectionEnabled(): Boolean {
         val p = preferences ?: return false
         if (p.unlockLocalCloudFeatures) return true
-        return (p.customFirebaseApp || p.unlockLocalCloudFeatures) && p.enableCloudDiscovery && p.enableSnapshotInjection
+        return p.customFirebaseApp && p.enableCloudDiscovery && p.enableSnapshotInjection
     }
 
     @Volatile

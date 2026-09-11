@@ -205,4 +205,6 @@
 
     <string name="pref_unlock_local_cloud_features_title">Local Account Cloud Features</string>
     <string name="pref_unlock_local_cloud_features_desc">Enable cloud backups for local accounts without Firebase</string>
+    <string name="pref_local_account_custom_uid_title">Custom Encryption UID (Optional)</string>
+    <string name="pref_local_account_custom_uid_desc">Custom Firebase UID used to derive the 256-bit AES encryption key and account directory hash for local backups. Leave empty for default anonymous key.</string>
 </resources>

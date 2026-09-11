@@ -7,14 +7,14 @@ import org.junit.Test
 class FirebaseConfigValidatorTest {
 
     @Test
-    fun testValidUserExampleCredentials() {
-        val projectId = "swiftbackup-personal-adead"
-        val databaseUrl = "https://swiftbackup-personal-adead-default-rtdb.firebaseio.com"
-        val appId = "1:758023045078:android:4dea22835138c6e2ef2e77"
-        val apiKey = "AIzaSyAw7Q_SSjMMC3_SCkmnYN3S2uXmGqglzlc"
-        val senderId = "758023045078"
-        val clientId = "758023045078-7k1rddvuv4r31dh69fm0qpnf183528in.apps.googleusercontent.com"
-        val storageBucket = "swiftbackup-personal-adead.firebasestorage.app"
+    fun testValidCredentials() {
+        val projectId = "dummy-firebase-project"
+        val databaseUrl = "https://dummy-firebase-project-default-rtdb.firebaseio.com"
+        val appId = "1:123456789012:android:abcdef0123456789"
+        val apiKey = "AIzaSyD_FakeApiKeyForTestingPurposes123"
+        val senderId = "123456789012"
+        val clientId = "123456789012-androidclient1234567890abcdef.apps.googleusercontent.com"
+        val storageBucket = "dummy-firebase-project.firebasestorage.app"
 
         assertTrue(FirebaseConfigValidator.isValidProjectId(projectId))
         assertTrue(FirebaseConfigValidator.isValidDatabaseUrl(databaseUrl))
@@ -68,7 +68,7 @@ class FirebaseConfigValidatorTest {
     @Test
     fun testAppIdValidation() {
         assertTrue(FirebaseConfigValidator.isValidAppId("1:65312358122:android:ea39a9e3952e6522"))
-        assertTrue(FirebaseConfigValidator.isValidAppId("1:758023045078:android:4dea22835138c6e2ef2e77"))
+        assertTrue(FirebaseConfigValidator.isValidAppId("1:123456789012:android:abcdef0123456789"))
 
         // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidAppId(""))
@@ -79,19 +79,19 @@ class FirebaseConfigValidatorTest {
 
     @Test
     fun testApiKeyValidation() {
-        assertTrue(FirebaseConfigValidator.isValidApiKey("AIzaSyAw7Q_SSjMMC3_SCkmnYN3S2uXmGqglzlc"))
+        assertTrue(FirebaseConfigValidator.isValidApiKey("AIzaSyD_FakeApiKeyForTestingPurposes123"))
         assertTrue(FirebaseConfigValidator.isValidApiKey("AIzaSyD-1234567890abcdef1234567890abcde"))
 
         // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidApiKey(""))
         assertFalse(FirebaseConfigValidator.isValidApiKey("abc"))
         assertFalse(FirebaseConfigValidator.isValidApiKey("AIza123")) // too short
-        assertFalse(FirebaseConfigValidator.isValidApiKey("BIzaSyAw7Q_SSjMMC3_SCkmnYN3S2uXmGqglzlc")) // does not start with AIza
+        assertFalse(FirebaseConfigValidator.isValidApiKey("BIzaSyD_FakeApiKeyForTestingPurposes123")) // does not start with AIza
     }
 
     @Test
     fun testSenderIdValidation() {
-        assertTrue(FirebaseConfigValidator.isValidSenderId("758023045078"))
+        assertTrue(FirebaseConfigValidator.isValidSenderId("123456789012"))
         assertTrue(FirebaseConfigValidator.isValidSenderId("65312358122"))
 
         // Invalid cases
@@ -102,14 +102,14 @@ class FirebaseConfigValidatorTest {
 
     @Test
     fun testClientIdValidation() {
-        assertTrue(FirebaseConfigValidator.isValidClientId("758023045078-7k1rddvuv4r31dh69fm0qpnf183528in.apps.googleusercontent.com"))
+        assertTrue(FirebaseConfigValidator.isValidClientId("123456789012-androidclient1234567890abcdef.apps.googleusercontent.com"))
         assertTrue(FirebaseConfigValidator.isValidClientId("123456789-abcdef.apps.googleusercontent.com"))
 
         // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidClientId(""))
         assertFalse(FirebaseConfigValidator.isValidClientId("abc"))
-        assertFalse(FirebaseConfigValidator.isValidClientId("758023045078.apps.googleusercontent.com")) // missing hash
-        assertFalse(FirebaseConfigValidator.isValidClientId("758023045078-hash.google.com"))
+        assertFalse(FirebaseConfigValidator.isValidClientId("123456789012.apps.googleusercontent.com")) // missing hash
+        assertFalse(FirebaseConfigValidator.isValidClientId("123456789012-hash.google.com"))
     }
 
     @Test
@@ -119,7 +119,7 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("   "))
 
         // Valid bucket names
-        assertTrue(FirebaseConfigValidator.isValidStorageBucket("swiftbackup-personal-adead.firebasestorage.app"))
+        assertTrue(FirebaseConfigValidator.isValidStorageBucket("dummy-firebase-project.firebasestorage.app"))
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("my-app.appspot.com"))
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("custom-bucket-name"))
 

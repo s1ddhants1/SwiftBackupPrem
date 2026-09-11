@@ -164,9 +164,18 @@ object BackupCrypto {
     }
 
     @SuppressLint("SdCardPath")
-    fun resolveCandidateUids(context: Context?, classLoader: ClassLoader, targets: ResolvedTargets? = null): List<String> {
+    fun resolveCandidateUids(
+        context: Context?,
+        classLoader: ClassLoader,
+        targets: ResolvedTargets? = null,
+        prefs: PreferencesManager? = null
+    ): List<String> {
         val uids = LinkedHashSet<String>()
         uids.add(BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID)
+
+        if (prefs != null && prefs.unlockLocalCloudFeatures && prefs.localAccountCustomUid.isNotBlank()) {
+            uids.add(prefs.localAccountCustomUid.trim())
+        }
 
         // 1. Resolved user classes from targets
         targets?.authUserClass?.let { cls ->

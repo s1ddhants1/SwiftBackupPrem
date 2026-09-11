@@ -46,11 +46,117 @@ object LocalCloudUnlockHook : HookHandler {
     ) {
         Log.d(TAG, "[LocalCloudUnlock] Applying LocalCloudUnlockHook (unlockLocalCloudFeatures=${prefs.unlockLocalCloudFeatures})")
         hookIsAnonymous(module, classLoader, targets, prefs)
+        hookGetUid(module, classLoader, targets, prefs)
         hookFirebaseWatcher(module, classLoader, targets, prefs)
         hookAppCloudBackups(module, context, classLoader, targets, prefs)
         hookFireSynchronizer(module, context, classLoader, targets, prefs)
         hookDatabaseReferenceWrites(module, context, classLoader, targets, prefs)
         hookQueryListeners(module, context, classLoader, targets, prefs)
+    }
+
+    fun hookGetUid(
+        module: XposedModule,
+        classLoader: ClassLoader,
+        targets: ResolvedTargets,
+        prefs: PreferencesManager
+    ) {
+        val userClasses = listOfNotNull(
+            loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.anonymous.MFirebaseUser"),
+            loadClassFlexible(classLoader, "com.google.firebase.auth.FirebaseUser"),
+            targets.authUserClass,
+            targets.anonUserClass
+        ).distinct()
+
+        for (userCls in userClasses) {
+            attempt("hook ${userCls.simpleName}.getUid") {
+                val m = userCls.methods.firstOrNull { it.name == "getUid" && it.parameterCount == 0 && it.returnType == String::class.java }
+                    ?: userCls.declaredMethods.firstOrNull { it.name == "getUid" && it.parameterCount == 0 && it.returnType == String::class.java }
+                if (m != null) {
+                    module.hookTracked(m, idPrefix = "local-cloud-${userCls.simpleName}-get-uid").intercept { chain ->
+                        val customUid = prefs.localAccountCustomUid.trim()
+                        if (prefs.unlockLocalCloudFeatures && customUid.isNotEmpty()) {
+                            if (isAnonymousUserInstance(chain.thisObject)) {
+                                return@intercept customUid
+                            }
+                        }
+                        chain.proceed()
+                    }
+                    Log.i(TAG, "[LocalCloudUnlock] Hooked ${userCls.name}.getUid for custom UID")
+                }
+            }
+        }
+
+        targets.anonUserClass?.let { anonCls ->
+            attempt("hook ${anonCls.simpleName} anonymous user factory") {
+                val factoryMethod = anonCls.declaredMethods.firstOrNull {
+                    Modifier.isStatic(it.modifiers) && it.parameterCount == 0 &&
+                        it.returnType.name.contains("MFirebaseUser")
+                } ?: anonCls.methods.firstOrNull {
+                    Modifier.isStatic(it.modifiers) && it.parameterCount == 0 &&
+                        it.returnType.name.contains("MFirebaseUser")
+                }
+                if (factoryMethod != null) {
+                    module.hookTracked(factoryMethod, idPrefix = "local-cloud-anon-factory").intercept { chain ->
+                        val result = chain.proceed()
+                        val customUid = prefs.localAccountCustomUid.trim()
+                        if (prefs.unlockLocalCloudFeatures && customUid.isNotEmpty() && result != null) {
+                            try {
+                                val uidField = result.javaClass.declaredFields.firstOrNull { it.name == "uid" }
+                                    ?: result.javaClass.fields.firstOrNull { it.name == "uid" }
+                                if (uidField != null) {
+                                    uidField.isAccessible = true
+                                    uidField.set(result, customUid)
+                                }
+                            } catch (t: Throwable) {
+                                Log.w(TAG, "[LocalCloudUnlock] Failed to set custom UID on MFirebaseUser instance", t)
+                            }
+                        }
+                        result
+                    }
+                    Log.i(TAG, "[LocalCloudUnlock] Hooked ${anonCls.name}.${factoryMethod.name} factory")
+                }
+            }
+        }
+    }
+
+    fun isAnonymousUserInstance(userObj: Any?): Boolean {
+        if (userObj == null) return false
+        return try {
+            val cls = userObj.javaClass
+
+            val emailField = cls.declaredFields.firstOrNull { it.name == "email" }
+            if (emailField != null) {
+                emailField.isAccessible = true
+                val email = emailField.get(userObj) as? String
+                if (email == "anonymous@swiftbackup.app") return true
+            }
+
+            val providerField = cls.declaredFields.firstOrNull { it.name == "providerId" }
+            if (providerField != null) {
+                providerField.isAccessible = true
+                val provider = providerField.get(userObj) as? String
+                if (provider == "anonymous") return true
+            }
+
+            val isAnonField = cls.declaredFields.firstOrNull {
+                it.name == "isAnonymous" || (it.type == Boolean::class.javaPrimitiveType && !Modifier.isStatic(it.modifiers))
+            }
+            if (isAnonField != null) {
+                isAnonField.isAccessible = true
+                if (isAnonField.getBoolean(userObj)) return true
+            }
+
+            val uidField = cls.declaredFields.firstOrNull { it.name == "uid" }
+            if (uidField != null) {
+                uidField.isAccessible = true
+                val uid = uidField.get(userObj) as? String
+                if (uid == "d58b0944415a4889d7f11aa95fbeca50") return true
+            }
+
+            false
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     fun hookIsAnonymous(

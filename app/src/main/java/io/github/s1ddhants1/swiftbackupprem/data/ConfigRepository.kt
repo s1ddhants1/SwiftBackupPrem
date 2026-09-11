@@ -128,7 +128,8 @@ class ConfigRepositoryImpl(
             "gcmDefaultSenderId",
             "googleStorageBucket",
             "projectId",
-            "clientId"
+            "clientId",
+            "localAccountCustomUid"
         ).any { rawJson.has(it) }
 
         if (!isGoogleServices && !hasSbpKeys) {
@@ -169,7 +170,8 @@ class ConfigRepositoryImpl(
             enableSnapshotInjection = if (rawJson.has("enableSnapshotInjection")) rawJson.optBoolean("enableSnapshotInjection", decoded.enableSnapshotInjection) else decoded.enableSnapshotInjection,
             enableBackupRebuilder = if (rawJson.has("enableBackupRebuilder")) rawJson.optBoolean("enableBackupRebuilder", decoded.enableBackupRebuilder) else decoded.enableBackupRebuilder,
             syncMetadataToFirebase = if (rawJson.has("syncMetadataToFirebase")) rawJson.optBoolean("syncMetadataToFirebase", decoded.syncMetadataToFirebase) else decoded.syncMetadataToFirebase,
-            unlockLocalCloudFeatures = if (rawJson.has("unlockLocalCloudFeatures")) rawJson.optBoolean("unlockLocalCloudFeatures", decoded.unlockLocalCloudFeatures) else decoded.unlockLocalCloudFeatures
+            unlockLocalCloudFeatures = if (rawJson.has("unlockLocalCloudFeatures")) rawJson.optBoolean("unlockLocalCloudFeatures", decoded.unlockLocalCloudFeatures) else decoded.unlockLocalCloudFeatures,
+            localAccountCustomUid = if (rawJson.has("localAccountCustomUid")) rawJson.optString("localAccountCustomUid", decoded.localAccountCustomUid) else decoded.localAccountCustomUid
         )
 
         prefs.applyConfig(finalConfig)

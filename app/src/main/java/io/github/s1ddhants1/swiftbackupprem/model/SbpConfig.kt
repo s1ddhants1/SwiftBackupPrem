@@ -20,7 +20,8 @@ data class SbpConfig(
     val gcmDefaultSenderId: String = "",
     val googleStorageBucket: String = "",
     val projectId: String = "",
-    val clientId: String = ""
+    val clientId: String = "",
+    val localAccountCustomUid: String = ""
 ) {
     val isCompleteFirebaseConfig: Boolean
         get() = FirebaseConfigValidator.isValidConfig(

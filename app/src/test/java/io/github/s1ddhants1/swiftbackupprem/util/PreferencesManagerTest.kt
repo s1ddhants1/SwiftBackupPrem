@@ -122,6 +122,24 @@ class PreferencesManagerTest {
         assertTrue(prefs.syncMetadataToFirebase)
     }
 
+    @Test
+    fun applyConfigSetsCustomUidAndTiesDiscoveryToLocalCloudFeatures() {
+        val prefs = PreferencesManager(null)
+        val config = io.github.s1ddhants1.swiftbackupprem.model.SbpConfig(
+            customFirebaseApp = false,
+            unlockLocalCloudFeatures = true,
+            localAccountCustomUid = "custom_local_user_123"
+        )
+
+        prefs.applyConfig(config)
+
+        assertTrue(prefs.unlockLocalCloudFeatures)
+        assertTrue(prefs.enableCloudDiscovery)
+        assertTrue(prefs.enableSnapshotInjection)
+        assertEquals("custom_local_user_123", prefs.localAccountCustomUid)
+        assertEquals("custom_local_user_123", prefs.toConfig().localAccountCustomUid)
+    }
+
     private class FakeSharedPreferences : android.content.SharedPreferences {
         val map = mutableMapOf<String, Any?>()
 

@@ -75,6 +75,7 @@ class PreferencesManager(
     var unlockLocalCloudFeatures by booleanPreference("unlock_local_cloud_features", false)
     var customFirebaseApp by booleanPreference("custom_firebase_app")
     var firebaseSetupFinished by booleanPreference("firebase_setup_finished", false)
+    var localAccountCustomUid by stringPreference(Consts.localAccountCustomUid)
 
     fun toConfig(): SbpConfig = SbpConfig(
         enablePremium = enablePremium,
@@ -92,7 +93,8 @@ class PreferencesManager(
         gcmDefaultSenderId = gcmDefaultSenderId,
         googleStorageBucket = googleStorageBucket,
         projectId = projectId,
-        clientId = clientId
+        clientId = clientId,
+        localAccountCustomUid = localAccountCustomUid
     )
 
     fun applyConfig(config: SbpConfig) {
@@ -100,10 +102,11 @@ class PreferencesManager(
         disableTelemetry = config.disableTelemetry
         unlockLocalCloudFeatures = config.unlockLocalCloudFeatures
         customFirebaseApp = config.customFirebaseApp
+        localAccountCustomUid = config.localAccountCustomUid
         val canUseCloud = config.customFirebaseApp || config.unlockLocalCloudFeatures
-        enableCloudDiscovery = if (canUseCloud) config.enableCloudDiscovery else false
+        enableCloudDiscovery = if (canUseCloud) (config.unlockLocalCloudFeatures || config.enableCloudDiscovery) else false
         enableGoogleDriveScope = if (config.customFirebaseApp) config.enableGoogleDriveScope else false
-        enableSnapshotInjection = if (canUseCloud && config.enableCloudDiscovery) config.enableSnapshotInjection else false
+        enableSnapshotInjection = if (canUseCloud) (config.unlockLocalCloudFeatures || (config.enableCloudDiscovery && config.enableSnapshotInjection)) else false
         enableBackupRebuilder = if (canUseCloud) config.enableBackupRebuilder else false
         syncMetadataToFirebase = if (canUseCloud) config.syncMetadataToFirebase else false
         googleAppId = config.googleAppId
