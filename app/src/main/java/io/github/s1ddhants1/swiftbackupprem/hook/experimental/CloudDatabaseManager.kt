@@ -162,6 +162,7 @@ object CloudDatabaseManager {
     fun buildAppSettings(sp: SharedPreferences, connectedCloud: String? = null): JSONObject {
         val appSettings = JSONObject()
 
+        // --- Backup strategy (MultipleBackupStrategy) ---
         val stratStr = sp.getString("apps_multiple_backups_strategy", null)
         if (!stratStr.isNullOrBlank()) {
             val parsedStrat = attempt("parse apps_multiple_backups_strategy", silent = true) {
@@ -176,11 +177,13 @@ object CloudDatabaseManager {
             appSettings.put("appsMultipleBackupStrategy", JSONObject().put("typeInt", 0))
         }
 
+        // --- Cloud connection ---
         val cloud = connectedCloud ?: sp.getString("connected_cloud_type", null)
         if (!cloud.isNullOrBlank()) {
             appSettings.put("cloudConnection", cloud)
         }
 
+        // --- UI preferences ---
         val themeMode = sp.getInt("app_theme_mode", 3)
         appSettings.put("themeModeId", themeMode)
 
@@ -195,41 +198,79 @@ object CloudDatabaseManager {
             appSettings.put("useAmoledTheme", true)
         }
 
-        if (sp.contains("multithreaded_downloads_chunk_count")) {
-            val chunks = sp.getInt("multithreaded_downloads_chunk_count", -1)
-            if (chunks > 0) {
-                appSettings.put("multiThreadChunksCount", chunks)
-            }
-        }
-
-        if (sp.contains("parallel_cloud_transfers")) {
-            appSettings.put("parallelCloudTransfers", sp.getBoolean("parallel_cloud_transfers", false))
-        }
-
         if (sp.contains("dynamic_colors")) {
-            appSettings.put("dynamicColors", sp.getBoolean("dynamic_colors", true))
+            val dc = sp.getBoolean("dynamic_colors", true)
+            if (!dc) appSettings.put("isDynamicColors", false)
         }
 
-        if (sp.contains("show_system_apps")) {
-            appSettings.put("showSystemApps", sp.getBoolean("show_system_apps", false))
+        sp.getString("app_locale", null)?.takeIf { it.isNotBlank() }?.let {
+            appSettings.put("language", it)
         }
 
-        if (sp.contains("backup_app_cache")) {
-            appSettings.put("isAppCacheBackupReq", sp.getBoolean("backup_app_cache", false))
+        sp.getString("pinned_quick_actions", null)?.takeIf { it.isNotBlank() }?.let {
+            appSettings.put("pinnedQuickActions", it)
         }
 
-        if (sp.contains("in_place_apk_downgrades")) {
-            appSettings.put("inPlaceApkDowngrades", sp.getBoolean("in_place_apk_downgrades", false))
+        // --- Restore config ---
+        if (sp.contains("restore_permissions_mode")) {
+            val mode = sp.getInt("restore_permissions_mode", 0)
+            if (mode > 0) appSettings.put("restorePermissionsMode", mode)
+        }
+
+        if (sp.contains("restore_special_permissions")) {
+            val rsp = sp.getBoolean("restore_special_permissions", true)
+            if (!rsp) appSettings.put("restoreSpecialAppPerms", false)
         }
 
         if (sp.contains("restore_ssaids")) {
-            appSettings.put("restoreSsaids", sp.getBoolean("restore_ssaids", false))
+            val rs = sp.getBoolean("restore_ssaids", false)
+            if (rs) appSettings.put("isRestoreSsaids", true)
+        }
+
+        if (sp.contains("in_place_apk_downgrades")) {
+            val ipd = sp.getBoolean("in_place_apk_downgrades", false)
+            if (ipd) appSettings.put("isInPlaceApkDowngradeEnabled", true)
+        }
+
+        // --- Backup config ---
+        if (sp.contains("saved_password_mode")) {
+            val pm = sp.getInt("saved_password_mode", 0)
+            if (pm > 0) appSettings.put("passwordStrategy", pm)
+        }
+
+        if (sp.contains("backup_app_cache")) {
+            val bac = sp.getBoolean("backup_app_cache", false)
+            if (bac) appSettings.put("isAppCacheBackupReq", true)
+        }
+
+        if (sp.contains("app_backup_archiving")) {
+            val aba = sp.getBoolean("app_backup_archiving", false)
+            if (aba) appSettings.put("isAppBackupArchivingEnabled", true)
+        }
+
+        if (sp.contains("app_backup_limits")) {
+            val limitsStr = sp.getString("app_backup_limits", null)
+            if (!limitsStr.isNullOrBlank()) {
+                val parsed = attempt("parse app_backup_limits", silent = true) {
+                    JSONArray(limitsStr)
+                }
+                if (parsed != null) {
+                    appSettings.put("appBackupLimits", parsed)
+                }
+            }
+        }
+
+        if (sp.contains("show_system_apps")) {
+            val ssa = sp.getBoolean("show_system_apps", false)
+            if (ssa) appSettings.put("isShowSystemApps", true)
         }
 
         if (sp.contains("play_notification_sounds")) {
-            appSettings.put("playNotificationSounds", sp.getBoolean("play_notification_sounds", true))
+            val pns = sp.getBoolean("play_notification_sounds", true)
+            if (!pns) appSettings.put("isPlayNotificationSounds", false)
         }
 
+        // --- Compression levels ---
         if (sp.contains("compression_level_apps")) {
             val lvl = sp.getInt("compression_level_apps", -1)
             if (lvl >= 0) appSettings.put("appsCompressionLevel", lvl)
@@ -237,6 +278,74 @@ object CloudDatabaseManager {
         if (sp.contains("compression_level_folders")) {
             val lvl = sp.getInt("compression_level_folders", -1)
             if (lvl >= 0) appSettings.put("foldersCompressionLevel", lvl)
+        }
+        if (sp.contains("compression_level_msgs")) {
+            val lvl = sp.getInt("compression_level_msgs", -1)
+            if (lvl >= 0) appSettings.put("msgsCompressionLevel", lvl)
+        }
+        if (sp.contains("compression_level_calls")) {
+            val lvl = sp.getInt("compression_level_calls", -1)
+            if (lvl >= 0) appSettings.put("callsCompressionLevel", lvl)
+        }
+
+        // --- SMS/Call backup limits ---
+        if (sp.contains("max_sms_backups")) {
+            val max = sp.getInt("max_sms_backups", -1)
+            if (max > 0) appSettings.put("maxSmsBackups", max)
+        }
+        if (sp.contains("max_call_backups")) {
+            val max = sp.getInt("max_call_backups", -1)
+            if (max > 0) appSettings.put("maxCallBackups", max)
+        }
+        if (sp.contains("messages_backup_mms")) {
+            val mms = sp.getBoolean("messages_backup_mms", true)
+            if (!mms) appSettings.put("backupMms", false)
+        }
+
+        // --- Cloud transfer settings ---
+        if (sp.contains("parallel_cloud_transfers")) {
+            val pct = sp.getBoolean("parallel_cloud_transfers", false)
+            if (pct) appSettings.put("isParallelCloudTransfers", true)
+        }
+
+        if (sp.contains("multithreaded_downloads")) {
+            val mtd = sp.getBoolean("multithreaded_downloads", false)
+            if (mtd) appSettings.put("isMultithreadedDownloads", true)
+        }
+
+        if (sp.contains("multithreaded_downloads_chunk_count")) {
+            val chunks = sp.getInt("multithreaded_downloads_chunk_count", -1)
+            if (chunks > 0) appSettings.put("multiThreadChunksCount", chunks)
+        }
+
+        // --- Provider-specific chunk sizes ---
+        if (sp.contains("dropbox_chunk_size")) {
+            val cs = sp.getInt("dropbox_chunk_size", 25)
+            if (cs != 25) appSettings.put("dropboxChunkSize", cs)
+        }
+        if (sp.contains("one_drive_chunk_size")) {
+            val cs = sp.getInt("one_drive_chunk_size", 5)
+            if (cs != 5) appSettings.put("oneDriveChunkSize", cs)
+        }
+        if (sp.contains("nextcloud_chunk_size")) {
+            val cs = sp.getInt("nextcloud_chunk_size", 100)
+            if (cs != 100) appSettings.put("nextCloudChunkSize", cs)
+        }
+        if (sp.contains("nextcloud_forced_chunking")) {
+            val fc = sp.getBoolean("nextcloud_forced_chunking", false)
+            if (fc) appSettings.put("nextCloudForcedChunking", true)
+        }
+        if (sp.contains("s3_chunk_size")) {
+            val cs = sp.getInt("s3_chunk_size", 5)
+            if (cs != 5) appSettings.put("s3ChunkSize", cs)
+        }
+
+        // --- Swipe actions ---
+        sp.getString("app_list_right_swipe_actions", null)?.takeIf { it.isNotBlank() }?.let {
+            appSettings.put("appListRightSwipeActions", it)
+        }
+        sp.getString("app_list_left_swipe_actions", null)?.takeIf { it.isNotBlank() }?.let {
+            appSettings.put("appListLeftSwipeActions", it)
         }
 
         return appSettings
@@ -414,6 +523,18 @@ object CloudDatabaseManager {
         }
         cloudDirObj.put("walls", wallsObj)
 
+        if (CloudDiscoveryHook.discoveredWifi.isNotEmpty()) {
+            val wifiEntry = CloudDiscoveryHook.discoveredWifi.values.firstOrNull()
+            val wifiObj = JSONObject().apply {
+                wifiEntry?.let {
+                    if (it.fileId.isNotBlank()) put("driveId", it.fileId)
+                    if (it.size > 0) put("fileSize", it.size)
+                    put("wifiNetworksCount", it.count)
+                }
+            }
+            cloudDirObj.put("wifi", wifiObj)
+        }
+
         cloudV1.put(cloudDir, cloudDirObj)
         userObj.put("cloud_v1", cloudV1)
 
@@ -506,11 +627,22 @@ object CloudDatabaseManager {
         targets: ResolvedTargets,
         prefs: PreferencesManager
     ): Any? {
+        // Firebase connection state — always report connected for local accounts
         if (rawPath.contains(".info/connected") || rawPath.endsWith(".info/connected")) {
             return true
         }
+        // Backend health probe — always report healthy
         if (rawPath.contains("health/enabled") || rawPath.contains("appData/health")) {
             return true
+        }
+        // Purchase verification — return synthetic verified record
+        if (rawPath.contains("purchase_verifications")) {
+            Log.d(TAG, "[CloudDb] Returning synthetic purchase verification for path: $rawPath")
+            return mapOf(
+                "verified" to true,
+                "verificationTime" to System.currentTimeMillis(),
+                "sku" to "premium"
+            )
         }
 
         val db = ensureDb(context, classLoader, targets, prefs)
@@ -531,6 +663,21 @@ object CloudDatabaseManager {
         if (fullPathStr.contains("callLogBackupsCount")) {
             return CloudDiscoveryHook.discoveredCalls.size
         }
+        if (fullPathStr.contains("walls")) {
+            return mapOf("wallsBackupCount" to CloudDiscoveryHook.discoveredWalls.size)
+        }
+        if (fullPathStr.contains("wifi")) {
+            val wifiEntry = CloudDiscoveryHook.discoveredWifi.values.firstOrNull()
+            return if (wifiEntry != null) {
+                mapOf<String, Any>(
+                    "driveId" to wifiEntry.fileId,
+                    "fileSize" to wifiEntry.size,
+                    "wifiNetworksCount" to wifiEntry.count
+                )
+            } else {
+                null
+            }
+        }
         val pkgMatch = Pattern.compile("apps/([^/?&#]+)").matcher(fullPathStr)
         if (pkgMatch.find()) {
             val targetPkg = pkgMatch.group(1) ?: ""
@@ -549,7 +696,7 @@ object CloudDatabaseManager {
             return CloudDiscoveryHook.discoveredFolders.mapValues { (_, folder) -> folder.toJson() }
         }
 
-        return emptyMap<String, Any>()
+        return null
     }
 
     fun updateDbFromWrite(
@@ -566,31 +713,70 @@ object CloudDatabaseManager {
             var current = db
             for (i in 0 until segments.size - 1) {
                 val seg = segments[i]
-                if (!current.has(seg)) {
-                    current.put(seg, JSONObject())
+                val existingKey = if (current.has(seg)) {
+                    seg
+                } else {
+                    val keys = current.keys().asSequence().toList()
+                    keys.firstOrNull { it.equals(seg, ignoreCase = true) }
+                        ?: keys.firstOrNull { it.replace(".", "").equals(seg.replace(".", ""), ignoreCase = true) }
+                        ?: keys.firstOrNull { it.replace(" ", "").equals(seg.replace(" ", ""), ignoreCase = true) }
+                        ?: (if (i > 0 && segments[i - 1] == "users" && keys.isNotEmpty()) keys.first() else null)
+                        ?: (if (i > 0 && segments[i - 1] == "cloud_v1" && keys.isNotEmpty()) {
+                            keys.firstOrNull { it.substringBefore(" ").equals(seg.substringBefore(" "), ignoreCase = true) }
+                                ?: keys.first()
+                        } else null)
+                        ?: (if (i > 0 && segments[i - 1] == "tags" && keys.isNotEmpty()) keys.first() else null)
                 }
-                current = current.getJSONObject(seg)
+
+                val targetKey = existingKey ?: seg
+                if (!current.has(targetKey)) {
+                    current.put(targetKey, JSONObject())
+                }
+                current = current.getJSONObject(targetKey)
             }
 
             val lastKey = segments.last()
-            val jsonVal = when (payload) {
-                null -> JSONObject.NULL
-                is JSONObject, is JSONArray, is Boolean, is Number, is String -> payload
-                is Map<*, *> -> @Suppress("UNCHECKED_CAST") JSONObject(payload as Map<String, Any?>)
-                else -> {
-                    val obj = JSONObject()
-                    for (field in payload.javaClass.declaredFields) {
-                        if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
-                        try {
-                            field.isAccessible = true
-                            field.get(payload)?.let { obj.put(field.name.removePrefix("_"), it) }
-                        } catch (_: Throwable) {}
+            if (payload == null) {
+                current.remove(lastKey)
+            } else {
+                val jsonVal = when (payload) {
+                    JSONObject.NULL -> null
+                    is JSONObject, is JSONArray, is Boolean, is Number, is String -> payload
+                    is Map<*, *> -> @Suppress("UNCHECKED_CAST") JSONObject(payload as Map<String, Any?>)
+                    else -> {
+                        val obj = JSONObject()
+                        for (field in payload.javaClass.declaredFields) {
+                            if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+                            try {
+                                field.isAccessible = true
+                                field.get(payload)?.let { obj.put(field.name.removePrefix("_"), it) }
+                            } catch (_: Throwable) {}
+                        }
+                        obj
                     }
-                    obj
+                }
+
+                if (jsonVal == null) {
+                    current.remove(lastKey)
+                } else {
+                    val existingObj = current.optJSONObject(lastKey)
+                    if (existingObj != null && jsonVal is JSONObject) {
+                        val keys = jsonVal.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            val v = jsonVal.get(k)
+                            if (v == null || v == JSONObject.NULL) {
+                                existingObj.remove(k)
+                            } else {
+                                existingObj.put(k, v)
+                            }
+                        }
+                    } else {
+                        current.put(lastKey, jsonVal)
+                    }
                 }
             }
 
-            current.put(lastKey, jsonVal)
             saveLocalDb(db)
             syncDbToCloud(context)
             Log.i(TAG, "[CloudDb] Updated database JSON at path: ${segments.joinToString("/")}")

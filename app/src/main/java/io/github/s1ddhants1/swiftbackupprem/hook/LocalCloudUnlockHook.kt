@@ -461,18 +461,16 @@ object LocalCloudUnlockHook : HookHandler {
 
         dbRefClass.methods.forEach { m ->
             when (m.name) {
-                "setValue", "updateChildren", "i" -> attempt("hook DatabaseReference.${m.name}") {
+                "setValue", "updateChildren", "removeValue", "i" -> attempt("hook DatabaseReference.${m.name}") {
                     module.hookTracked(m, idPrefix = "local-cloud-rtdb-write-${m.name}").intercept { chain ->
                         if (!prefs.unlockLocalCloudFeatures) return@intercept chain.proceed()
 
                         val path = chain.thisObject?.toString() ?: ""
-                        if (!path.contains("cloud_v1") && !path.contains("apps")) return@intercept chain.proceed()
-
                         Log.d(TAG, "[LocalCloudUnlock] Intercepted RTDB write ${m.name} for path: $path")
 
-                        val payload = chain.args.firstOrNull()
-                        if (payload != null) {
-                            CloudDatabaseManager.updateDbFromWrite(path, payload, context, prefs)
+                        val payload = if (m.name == "removeValue") null else chain.args.firstOrNull()
+                        CloudDatabaseManager.updateDbFromWrite(path, payload, context, prefs)
+                        if (payload != null && (path.contains("apps") || path.contains("cloud_v1"))) {
                             bgExecutor.execute {
                                 dispatchMetadataToCloud(context, path, payload, classLoader)
                             }
