@@ -100,7 +100,6 @@ object CloudDatabaseManager {
                 val content = json.toString(2)
                 Log.d(TAG, "[CloudDb] Uploading $CANONICAL_DB_FILE_NAME to active cloud providers...")
                 CloudScannerRegistry.uploadTextToActiveProviders(context, CANONICAL_DB_FILE_NAME, content)
-                CloudScannerRegistry.uploadTextToActiveProviders(context, "SwiftBackup/$CANONICAL_DB_FILE_NAME", content)
             }
         }
     }
@@ -136,18 +135,176 @@ object CloudDatabaseManager {
         targets: ResolvedTargets,
         prefs: PreferencesManager
     ): JSONObject {
-        currentDbJson?.let { return it }
+        val sp: SharedPreferences = attempt("get sp", silent = true) {
+            context.getSharedPreferences("org.swiftapps.swiftbackup_preferences", Context.MODE_PRIVATE)
+        } ?: run {
+            @Suppress("DEPRECATION")
+            android.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        }
 
-        loadLocalDb(context)?.let { return it }
-
-        val cloudDb = syncDbFromCloud(context)
-        if (cloudDb != null) return cloudDb
+        val existing = currentDbJson ?: loadLocalDb(context) ?: syncDbFromCloud(context)
+        if (existing != null) {
+            if (reconcileAppSettings(existing, sp)) {
+                saveLocalDb(existing)
+                syncDbToCloud(context)
+            }
+            currentDbJson = existing
+            return existing
+        }
 
         val constructed = buildDatabaseFromDiscovered(context, classLoader, targets, prefs)
         currentDbJson = constructed
         saveLocalDb(constructed)
         syncDbToCloud(context)
         return constructed
+    }
+
+    fun buildAppSettings(sp: SharedPreferences, connectedCloud: String? = null): JSONObject {
+        val appSettings = JSONObject()
+
+        val stratStr = sp.getString("apps_multiple_backups_strategy", null)
+        if (!stratStr.isNullOrBlank()) {
+            val parsedStrat = attempt("parse apps_multiple_backups_strategy", silent = true) {
+                JSONObject(stratStr)
+            }
+            if (parsedStrat != null) {
+                appSettings.put("appsMultipleBackupStrategy", parsedStrat)
+            } else {
+                appSettings.put("appsMultipleBackupStrategy", JSONObject().put("typeInt", 0))
+            }
+        } else {
+            appSettings.put("appsMultipleBackupStrategy", JSONObject().put("typeInt", 0))
+        }
+
+        val cloud = connectedCloud ?: sp.getString("connected_cloud_type", null)
+        if (!cloud.isNullOrBlank()) {
+            appSettings.put("cloudConnection", cloud)
+        }
+
+        val themeMode = sp.getInt("app_theme_mode", 3)
+        appSettings.put("themeModeId", themeMode)
+
+        val useAmoled = if (sp.contains("use_amoled_theme")) {
+            sp.getBoolean("use_amoled_theme", false)
+        } else if (sp.contains("amoled_black_theme")) {
+            sp.getBoolean("amoled_black_theme", false)
+        } else {
+            false
+        }
+        if (useAmoled) {
+            appSettings.put("useAmoledTheme", true)
+        }
+
+        if (sp.contains("multithreaded_downloads_chunk_count")) {
+            val chunks = sp.getInt("multithreaded_downloads_chunk_count", -1)
+            if (chunks > 0) {
+                appSettings.put("multiThreadChunksCount", chunks)
+            }
+        }
+
+        if (sp.contains("parallel_cloud_transfers")) {
+            appSettings.put("parallelCloudTransfers", sp.getBoolean("parallel_cloud_transfers", false))
+        }
+
+        if (sp.contains("dynamic_colors")) {
+            appSettings.put("dynamicColors", sp.getBoolean("dynamic_colors", true))
+        }
+
+        if (sp.contains("show_system_apps")) {
+            appSettings.put("showSystemApps", sp.getBoolean("show_system_apps", false))
+        }
+
+        if (sp.contains("backup_app_cache")) {
+            appSettings.put("isAppCacheBackupReq", sp.getBoolean("backup_app_cache", false))
+        }
+
+        if (sp.contains("in_place_apk_downgrades")) {
+            appSettings.put("inPlaceApkDowngrades", sp.getBoolean("in_place_apk_downgrades", false))
+        }
+
+        if (sp.contains("restore_ssaids")) {
+            appSettings.put("restoreSsaids", sp.getBoolean("restore_ssaids", false))
+        }
+
+        if (sp.contains("play_notification_sounds")) {
+            appSettings.put("playNotificationSounds", sp.getBoolean("play_notification_sounds", true))
+        }
+
+        if (sp.contains("compression_level_apps")) {
+            val lvl = sp.getInt("compression_level_apps", -1)
+            if (lvl >= 0) appSettings.put("appsCompressionLevel", lvl)
+        }
+        if (sp.contains("compression_level_folders")) {
+            val lvl = sp.getInt("compression_level_folders", -1)
+            if (lvl >= 0) appSettings.put("foldersCompressionLevel", lvl)
+        }
+
+        return appSettings
+    }
+
+    fun reconcileAppSettings(db: JSONObject, sp: SharedPreferences): Boolean {
+        val users = db.optJSONObject("users") ?: return false
+        val connectedCloud = sp.getString("connected_cloud_type", null)
+        val freshSettings = buildAppSettings(sp, connectedCloud)
+
+        var changed = false
+        val keys = users.keys()
+        while (keys.hasNext()) {
+            val uid = keys.next()
+            val userObj = users.optJSONObject(uid) ?: continue
+            val currentSettings = userObj.optJSONObject("appSettings")
+            if (currentSettings == null) {
+                userObj.put("appSettings", freshSettings)
+                changed = true
+                continue
+            }
+
+            val stratStr = sp.getString("apps_multiple_backups_strategy", null)
+            val currentStrat = currentSettings.optJSONObject("appsMultipleBackupStrategy")
+            if (stratStr.isNullOrBlank()) {
+                if (currentStrat == null || currentStrat.has("maxNumOfBackups") || currentStrat.optInt("typeInt", 0) != 0) {
+                    currentSettings.put("appsMultipleBackupStrategy", JSONObject().put("typeInt", 0))
+                    changed = true
+                }
+            } else {
+                val parsed = attempt("parse strat", silent = true) { JSONObject(stratStr) }
+                if (parsed != null && (currentStrat == null || currentStrat.toString() != parsed.toString())) {
+                    currentSettings.put("appsMultipleBackupStrategy", parsed)
+                    changed = true
+                }
+            }
+
+            val freshKeys = freshSettings.keys()
+            while (freshKeys.hasNext()) {
+                val fk = freshKeys.next()
+                if (fk == "appsMultipleBackupStrategy") continue
+                val fv = freshSettings.get(fk)
+                if (!currentSettings.has(fk) || currentSettings.get(fk) != fv) {
+                    currentSettings.put(fk, fv)
+                    changed = true
+                }
+            }
+
+            if (!freshSettings.has("useAmoledTheme") && currentSettings.has("useAmoledTheme")) {
+                currentSettings.remove("useAmoledTheme")
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private fun extractUserDisplayName(sp: SharedPreferences): String? {
+        for ((_, v) in sp.all) {
+            val str = v as? String ?: continue
+            if (str.startsWith("{") && str.contains("displayName") && str.contains("email")) {
+                val json = attempt("parse user json", silent = true) { JSONObject(str) }
+                val name = json?.optString("displayName")
+                if (!name.isNullOrBlank() && name != "Anonymous user") {
+                    return name
+                }
+            }
+        }
+        return null
     }
 
     fun buildDatabaseFromDiscovered(
@@ -186,27 +343,26 @@ object CloudDatabaseManager {
         val userObj = JSONObject()
 
         // 1. appSettings
-        val appSettings = JSONObject().apply {
-            val strat = JSONObject().apply {
-                put("maxNumOfBackups", 10)
-                put("stability", 0)
-                put("typeInt", 1)
-            }
-            put("appsMultipleBackupStrategy", strat)
-            put("cloudConnection", connectedCloud)
-            put("themeModeId", 3)
-            put("useAmoledTheme", true)
-        }
+        val appSettings = buildAppSettings(sp, connectedCloud)
         userObj.put("appSettings", appSettings)
 
         // 2. userInfo
+        val appVersionCode = attempt("get app version", silent = true) {
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
+            }
+        } ?: 620L
+        val displayName = extractUserDisplayName(sp) ?: cloudEmail.substringBefore("@").ifBlank { "Local User" }
         val userInfo = JSONObject().apply {
             put("anonymous", false)
-            put("currentAppVersion", 620)
-            put("displayName", "Local User")
+            put("currentAppVersion", appVersionCode)
+            put("displayName", displayName)
             put("email", cloudEmail)
             put("id", uid)
-            put("latestAppVersion", 620)
+            put("latestAppVersion", appVersionCode)
             put("photoUrl", "")
         }
         userObj.put("userInfo", userInfo)

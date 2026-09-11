@@ -143,7 +143,7 @@
     <string name="migrator_source_path_label">Source Path</string>
     <string name="migrator_source_path_placeholder">/sdcard/Download/SwiftBackup</string>
     <string name="migrator_step2_title">2. Decryption Key (Source UID)</string>
-    <string name="migrator_source_uid_label">Source Firebase UID</string>
+    <string name="migrator_source_uid_label">Source UID</string>
     <string name="migrator_source_uid_placeholder">Enter source UID</string>
     <string name="migrator_detected_uids">Detected UIDs</string>
     <string name="migrator_chip_anon_key">Shared Anonymous Key</string>

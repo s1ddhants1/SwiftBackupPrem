@@ -7,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -35,7 +33,6 @@ import io.github.s1ddhants1.swiftbackupprem.ui.BackupMigratorUiEvent
 import io.github.s1ddhants1.swiftbackupprem.ui.BackupMigratorViewModel
 import io.github.s1ddhants1.swiftbackupprem.ui.TargetModeSelection
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
-import io.github.s1ddhants1.swiftbackupprem.util.BackupMigratorEngine
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import java.io.File
 
@@ -90,7 +87,6 @@ private fun LocalMigrationTabContent(
     prefs: PreferencesManager
 ) {
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
 
@@ -192,97 +188,12 @@ private fun LocalMigrationTabContent(
         }
 
         MigratorSectionCard(title = stringResource(R.string.migrator_step2_title)) {
-            OutlinedTextField(
-                value = state.sourceUid,
-                onValueChange = { viewModel.setSourceUid(it) },
-                label = { Text(stringResource(R.string.migrator_source_uid_label)) },
-                placeholder = { Text(stringResource(R.string.migrator_source_uid_placeholder)) },
-                trailingIcon = {
-                    IconButton(onClick = {
-                        clipboardManager.getText()?.text?.let { viewModel.setSourceUid(it) }
-                    }) {
-                        Icon(Icons.Default.ContentPaste, contentDescription = stringResource(R.string.cd_paste_uid))
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
+            CustomUidInputSection(
+                uid = state.sourceUid,
+                onUidChange = { viewModel.setSourceUid(it) },
+                detectedUids = state.detectedUids,
+                onRefreshUids = { viewModel.autoDetectSourceUids(context) }
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = stringResource(R.string.migrator_detected_uids),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                IconButton(
-                    onClick = { viewModel.autoDetectSourceUids(context) },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.cd_detect_uids),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                labelColor = MaterialTheme.colorScheme.onSurface,
-                iconColor = MaterialTheme.colorScheme.primary,
-                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val isAnonSelected = state.sourceUid == BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID
-                FilterChip(
-                    selected = isAnonSelected,
-                    onClick = {
-                        viewModel.setSourceUid(if (isAnonSelected) "" else BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID)
-                    },
-                    label = {
-                        Text(
-                            text = stringResource(R.string.migrator_chip_anon_key),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isAnonSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = chipColors
-                )
-
-                state.detectedUids.filter { it != BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID }.forEach { uid ->
-                    val isUidSelected = state.sourceUid == uid
-                    FilterChip(
-                        selected = isUidSelected,
-                        onClick = {
-                            viewModel.setSourceUid(if (isUidSelected) "" else uid)
-                        },
-                        label = {
-                            Text(
-                                text = if (uid.length > 14) uid.take(12) + "..." else uid,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isUidSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = chipColors
-                    )
-                }
-            }
         }
 
         MigratorSectionCard(title = stringResource(R.string.migrator_step3_title)) {

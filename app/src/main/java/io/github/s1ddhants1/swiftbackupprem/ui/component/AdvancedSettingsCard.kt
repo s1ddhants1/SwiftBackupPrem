@@ -14,10 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.s1ddhants1.swiftbackupprem.R
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
+import io.github.s1ddhants1.swiftbackupprem.util.tvFocusable
 
 @Composable
 fun AdvancedSettingsCard(
@@ -38,7 +38,8 @@ fun AdvancedSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showAdvancedFeatures = !showAdvancedFeatures }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .tvFocusable(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -97,19 +98,12 @@ fun AdvancedSettingsCard(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 6.dp)
                         ) {
-                            SettingsTextField(
+                            CustomUidInputSection(
+                                uid = prefs.localAccountCustomUid,
+                                onUidChange = { prefs.localAccountCustomUid = it.trim() },
                                 label = stringResource(R.string.pref_local_account_custom_uid_title),
-                                pref = prefs.localAccountCustomUid,
-                                onPrefChange = { prefs.localAccountCustomUid = it.trim() },
-                                isRequired = false,
-                                showStatusIcon = false,
-                                imeAction = ImeAction.Done
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_local_account_custom_uid_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
+                                helperText = stringResource(R.string.pref_local_account_custom_uid_desc),
+                                prefs = prefs
                             )
                         }
                     }

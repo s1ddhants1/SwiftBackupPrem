@@ -138,6 +138,42 @@ object GoogleDriveScanner : CloudScanner {
         val folderId = prefs.getString("google_drive_cloud_main_folder_id", null) ?: return@attempt false
         val fileName = remoteRelativePath.substringAfterLast('/')
 
+        fun findExistingFileId(tok: String): String? {
+            val q = URLEncoder.encode("'$folderId' in parents and name='$fileName' and trashed=false", "UTF-8")
+            val urlStr = "https://www.googleapis.com/drive/v3/files?q=$q&fields=files(id)&pageSize=1"
+            val respText = executeGet(context, prefs, urlStr, tok) ?: return null
+            val root = attempt("parse search files", silent = true) { JSONObject(respText) } ?: return null
+            val filesArr = root.optJSONArray("files") ?: return null
+            if (filesArr.length() > 0) {
+                return filesArr.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }
+            }
+            return null
+        }
+
+        fun updateExisting(tok: String, fileId: String): Int {
+            val urlStr = "https://www.googleapis.com/upload/drive/v3/files/$fileId?uploadType=media"
+            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Authorization", "Bearer $tok")
+                setRequestProperty("X-HTTP-Method-Override", "PATCH")
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                connectTimeout = 20000
+                readTimeout = 20000
+            }
+            return try {
+                conn.outputStream.use { os ->
+                    os.write(content.toByteArray(StandardCharsets.UTF_8))
+                    os.flush()
+                }
+                val code = conn.responseCode
+                Log.d(TAG, "[GoogleDriveScanner] Update $fileName ($fileId) returned $code")
+                code
+            } finally {
+                conn.disconnect()
+            }
+        }
+
         fun sendMultipart(tok: String): Int {
             val boundary = "==SBP_GDRIVE_BOUNDARY_${System.currentTimeMillis()}=="
             val urlStr = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
@@ -172,18 +208,27 @@ object GoogleDriveScanner : CloudScanner {
                     os.flush()
                 }
                 val code = conn.responseCode
-                Log.d(TAG, "[GoogleDriveScanner] Upload $fileName returned $code")
+                Log.d(TAG, "[GoogleDriveScanner] Upload new $fileName returned $code")
                 code
             } finally {
                 conn.disconnect()
             }
         }
 
-        var code = sendMultipart(token)
+        fun uploadOrUpdate(tok: String): Int {
+            val existingId = findExistingFileId(tok)
+            return if (existingId != null) {
+                updateExisting(tok, existingId)
+            } else {
+                sendMultipart(tok)
+            }
+        }
+
+        var code = uploadOrUpdate(token)
         if (code == 401) {
             val freshToken = getOrRefreshToken(context, prefs, forceRefresh = true)
             if (!freshToken.isNullOrBlank() && freshToken != token) {
-                code = sendMultipart(freshToken)
+                code = uploadOrUpdate(freshToken)
             }
         }
 

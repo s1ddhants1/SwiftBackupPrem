@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.s1ddhants1.swiftbackupprem.util.tvFocusable
 
 @Composable
 fun SettingsSwitch(
@@ -31,7 +32,8 @@ fun SettingsSwitch(
                 role = Role.Switch,
                 onValueChange = onPrefChange
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .tvFocusable(),
         horizontalArrangement = Arrangement.spacedBy(15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

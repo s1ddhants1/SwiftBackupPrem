@@ -46,6 +46,8 @@ import io.github.s1ddhants1.swiftbackupprem.ui.theme.Theme
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
+import io.github.s1ddhants1.swiftbackupprem.util.rememberIsTvDevice
+import io.github.s1ddhants1.swiftbackupprem.util.tvFocusable
 import kotlinx.coroutines.launch
 
 enum class AppScreen { Settings, About, BackupMigrator }
@@ -56,11 +58,15 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         setContent {
             val context = LocalContext.current
+            val isTv = rememberIsTvDevice()
+
+            // Edge-to-edge is not applicable on TV (no system bars)
+            LaunchedEffect(isTv) { if (!isTv) enableEdgeToEdge() }
+
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val localPrefs = remember { getSharedPreferences(Consts.PREFS_SETTINGS, Context.MODE_PRIVATE) }
             val prefsState = remember { mutableStateOf(PreferencesManager(localPrefs)) }
@@ -351,7 +357,7 @@ private fun SettingsScreenContent(
 
                 Button(
                     onClick = onOpenMigrator,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp).tvFocusable(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(stringResource(R.string.btn_open_migrator), fontWeight = FontWeight.SemiBold)
@@ -425,7 +431,7 @@ private fun ActionButton(
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = containerColor),
-        modifier = modifier.heightIn(min = 46.dp),
+        modifier = modifier.heightIn(min = 46.dp).tvFocusable(),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
