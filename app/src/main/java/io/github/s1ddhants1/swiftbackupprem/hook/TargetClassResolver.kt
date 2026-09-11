@@ -35,6 +35,7 @@ object TargetClassResolver {
         var appBackup: Class<*>? = null
         var appMetadataXml: Class<*>? = null
         var fireSynchronizer: Class<*>? = null
+        var fireSynchronizerSuccess: Class<*>? = null
         var firebaseWatcher: Class<*>? = null
 
         val ver = Integer.valueOf(ctx.packageManager.getPackageInfo(Consts.packageName, 0).versionCode)
@@ -48,6 +49,8 @@ object TargetClassResolver {
             appBackup = c.appBackup?.let { loadClassFlexible(cl, it) }
             appMetadataXml = c.appMetadataXml?.let { loadClassFlexible(cl, it) }
             firebaseWatcher = c.firebaseWatcher?.let { loadClassFlexible(cl, it) }
+            fireSynchronizer = c.fireSynchronizer?.let { loadClassFlexible(cl, it) }
+            fireSynchronizerSuccess = c.fireSynchronizerSuccess?.let { loadClassFlexible(cl, it) }
         }
 
         attempt("load V class fallback", silent = true) {
@@ -65,9 +68,9 @@ object TargetClassResolver {
             if (cloudGms != null) break
         }
 
-        if (clientId != null && v != null && homeVm != null && authUser != null && oauthHelper != null && authRequestBuilder != null) {
+        if (clientId != null && v != null && homeVm != null && authUser != null && oauthHelper != null && authRequestBuilder != null && fireSynchronizer != null) {
             Log.d(Consts.TAG, "Resolved Swift Backup hook classes without DexKit scan")
-            return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer, firebaseWatcher)
+            return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer, firebaseWatcher, fireSynchronizerSuccess)
         }
 
         attempt("load dexkit native library") { System.loadLibrary("dexkit") }
@@ -172,6 +175,20 @@ object TargetClassResolver {
                     }
                 }
 
+                if (fireSynchronizerSuccess == null && fireSynchronizer != null) {
+                    val readMethod = fireSynchronizer?.declaredMethods?.firstOrNull {
+                        it.parameterCount == 2 && it.parameterTypes[1] == Boolean::class.javaPrimitiveType
+                    }
+                    val resultBaseClass = readMethod?.returnType
+                    if (resultBaseClass != null) {
+                        fireSynchronizerSuccess = bridge.findSingle(cl, "fireSynchronizerSuccessClass", filterInner = false) {
+                            matcher {
+                                superClass(resultBaseClass.name)
+                            }
+                        }
+                    }
+                }
+
                 if (firebaseWatcher == null) {
                     firebaseWatcher = bridge.findSingle(cl, "firebaseWatcherClass", filterInner = true) {
                         matcher { usingStrings("FCW", ".info/connected") }
@@ -186,7 +203,7 @@ object TargetClassResolver {
             Log.w(Consts.TAG, "Couldn't fully hook Swift Backup.")
         }
 
-        return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer, firebaseWatcher)
+        return ResolvedTargets(clientId, v, cloudGms, homeVm, authUser, anonUser, oauthHelper, authRequestBuilder, appBackup, appMetadataXml, fireSynchronizer, firebaseWatcher, fireSynchronizerSuccess)
     }
 
     private fun DexKitBridge.findSingle(

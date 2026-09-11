@@ -8,6 +8,7 @@ import androidx.annotation.Keep
 import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.BackupRebuilderHook
+import io.github.s1ddhants1.swiftbackupprem.hook.experimental.CloudDatabaseManager
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.CloudDiscoveryHook
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
 import io.github.s1ddhants1.swiftbackupprem.util.FirebaseSyncEngine
@@ -73,8 +74,9 @@ object LocalCloudUnlockHook : HookHandler {
                     ?: userCls.declaredMethods.firstOrNull { it.name == "getUid" && it.parameterCount == 0 && it.returnType == String::class.java }
                 if (m != null) {
                     module.hookTracked(m, idPrefix = "local-cloud-${userCls.simpleName}-get-uid").intercept { chain ->
-                        val customUid = prefs.localAccountCustomUid.trim()
-                        if (prefs.unlockLocalCloudFeatures && customUid.isNotEmpty()) {
+                        val customUid = prefs.localAccountCustomUid.trim().takeIf { it.isNotEmpty() }
+                            ?: CloudDatabaseManager.getPrimaryUid()
+                        if (prefs.unlockLocalCloudFeatures && !customUid.isNullOrBlank()) {
                             if (isAnonymousUserInstance(chain.thisObject)) {
                                 return@intercept customUid
                             }
@@ -98,8 +100,9 @@ object LocalCloudUnlockHook : HookHandler {
                 if (factoryMethod != null) {
                     module.hookTracked(factoryMethod, idPrefix = "local-cloud-anon-factory").intercept { chain ->
                         val result = chain.proceed()
-                        val customUid = prefs.localAccountCustomUid.trim()
-                        if (prefs.unlockLocalCloudFeatures && customUid.isNotEmpty() && result != null) {
+                        val customUid = prefs.localAccountCustomUid.trim().takeIf { it.isNotEmpty() }
+                            ?: CloudDatabaseManager.getPrimaryUid()
+                        if (prefs.unlockLocalCloudFeatures && !customUid.isNullOrBlank() && result != null) {
                             try {
                                 val uidField = result.javaClass.declaredFields.firstOrNull { it.name == "uid" }
                                     ?: result.javaClass.fields.firstOrNull { it.name == "uid" }
@@ -300,10 +303,6 @@ object LocalCloudUnlockHook : HookHandler {
                         }
                     }
 
-                    if (resultCtor != null) {
-                        return@intercept resultCtor.newInstance(null, null)
-                    }
-
                     chain.proceed()
                 }
                 Log.i(TAG, "[LocalCloudUnlock] Hooked AppCloudBackups.Companion.fetchForPackage")
@@ -333,28 +332,12 @@ object LocalCloudUnlockHook : HookHandler {
                     val path = ref.toString()
                     Log.d(TAG, "[LocalCloudUnlock] Intercepted FireSynchronizer.${m.name} for path: $path")
 
-                    val targetPkg = extractRegexGroup(path, "apps/([^/?&#]+)", 1)
-                    val snapshot = if (!targetPkg.isNullOrBlank()) {
-                        CloudDiscoveryHook.ensureScan(context, classLoader, targets)
-                        val matchingApps = CloudDiscoveryHook.findMatchingBackups(targetPkg)
-                        if (matchingApps.isNotEmpty()) {
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSyntheticSnapshot(classLoader, ref, matchingApps)
-                        } else {
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(classLoader, ref, emptyMap())
-                        }
-                    } else if (path.contains("apps")) {
-                        CloudDiscoveryHook.ensureScan(context, classLoader, targets)
-                        val allApps = CloudDiscoveryHook.getAllDiscoveredApps()
-                        val groupedMap = allApps.groupBy { it.sanitizedAppId }.mapValues { (_, appsForPkg) ->
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.buildMetadataMap(appsForPkg)
-                        }
-                        CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(classLoader, ref, groupedMap)
-                    } else {
-                        CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(classLoader, ref, emptyMap())
-                    }
+                    val snapshot = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotForPath(
+                        classLoader, ref, path, context, targets, prefs
+                    )
 
                     if (snapshot != null) {
-                        val successInstance = findSuccessResultInstance(returnType, snapshot)
+                        val successInstance = findSuccessResultInstance(returnType, snapshot, classLoader, targets)
                         if (successInstance != null) {
                             Log.d(TAG, "[LocalCloudUnlock] Returned synthetic snapshot result for path: $path")
                             return@intercept successInstance
@@ -371,7 +354,7 @@ object LocalCloudUnlockHook : HookHandler {
             it.parameterCount == 2 && it.parameterTypes[1] == Any::class.java
         }.forEach { m ->
             attempt("hook FireSynchronizer setValue (${m.name})") {
-                val successVal = findStaticInstance(m.returnType)
+                val successVal = findStaticInstance(m.returnType, classLoader)
                 module.hookTracked(m, idPrefix = "local-cloud-fire-sync-setValue").intercept { chain ->
                     if (!prefs.unlockLocalCloudFeatures) return@intercept chain.proceed()
                     val ref = chain.args.getOrNull(0) ?: return@intercept chain.proceed()
@@ -379,9 +362,12 @@ object LocalCloudUnlockHook : HookHandler {
                     val payload = chain.args.getOrNull(1)
                     Log.d(TAG, "[LocalCloudUnlock] Intercepted FireSynchronizer.${m.name} for path: $path")
 
-                    if (payload != null && (path.contains("apps") || path.contains("cloud_v1"))) {
-                        bgExecutor.execute {
-                            dispatchMetadataToCloud(context, path, payload, classLoader)
+                    if (payload != null) {
+                        CloudDatabaseManager.updateDbFromWrite(path, payload, context, prefs)
+                        if (path.contains("apps") || path.contains("cloud_v1")) {
+                            bgExecutor.execute {
+                                dispatchMetadataToCloud(context, path, payload, classLoader)
+                            }
                         }
                     }
 
@@ -399,7 +385,7 @@ object LocalCloudUnlockHook : HookHandler {
                     it.parameterTypes[1] != Any::class.java
         }.forEach { m ->
             attempt("hook FireSynchronizer runTransaction (${m.name})") {
-                val committedVal = findStaticInstance(m.returnType)
+                val committedVal = findStaticInstance(m.returnType, classLoader)
                 module.hookTracked(m, idPrefix = "local-cloud-fire-sync-runTransaction").intercept { chain ->
                     if (!prefs.unlockLocalCloudFeatures) return@intercept chain.proceed()
                     val ref = chain.args.getOrNull(0) ?: return@intercept chain.proceed()
@@ -415,14 +401,39 @@ object LocalCloudUnlockHook : HookHandler {
         }
     }
 
-    private fun findSuccessResultInstance(returnType: Class<*>, snapshot: Any): Any? = attempt("findSuccessResultInstance", silent = true) {
-        // Find constructor taking a snapshot
+    private fun findSuccessResultInstance(
+        returnType: Class<*>,
+        snapshot: Any,
+        classLoader: ClassLoader,
+        targets: ResolvedTargets
+    ): Any? = attempt("findSuccessResultInstance", silent = true) {
+        val successClass = targets.fireSynchronizerSuccessClass
+            ?: loadClassFlexible(classLoader, "defpackage.xe3")
+            ?: returnType.declaredClasses.firstOrNull { returnType.isAssignableFrom(it) }
+
+        if (successClass != null) {
+            val ctor = successClass.constructors.firstOrNull { it.parameterCount == 1 }
+            if (ctor != null) {
+                return@attempt ctor.newInstance(snapshot)
+            }
+        }
         returnType.constructors.firstOrNull { it.parameterCount == 1 }?.newInstance(snapshot)
     }
 
-    private fun findStaticInstance(targetClass: Class<*>): Any? = attempt("findStaticInstance", silent = true) {
-        targetClass.declaredFields.firstOrNull { Modifier.isStatic(it.modifiers) && it.type == targetClass }?.get(null)
-            ?: targetClass.fields.firstOrNull { Modifier.isStatic(it.modifiers) && it.type == targetClass }?.get(null)
+    private fun findStaticInstance(targetClass: Class<*>, classLoader: ClassLoader? = null): Any? = attempt("findStaticInstance", silent = true) {
+        targetClass.declaredFields.firstOrNull { Modifier.isStatic(it.modifiers) && targetClass.isAssignableFrom(it.type) }?.apply { isAccessible = true }?.get(null)
+            ?: targetClass.fields.firstOrNull { Modifier.isStatic(it.modifiers) && targetClass.isAssignableFrom(it.type) }?.apply { isAccessible = true }?.get(null)
+            ?: targetClass.declaredClasses.firstOrNull { targetClass.isAssignableFrom(it) }?.let { inner ->
+                inner.declaredFields.firstOrNull { Modifier.isStatic(it.modifiers) && targetClass.isAssignableFrom(it.type) }?.apply { isAccessible = true }?.get(null)
+            }
+            ?: classLoader?.let { cl ->
+                listOf("defpackage.ze3", "defpackage.te3", "defpackage.se3").firstNotNullOfOrNull { name ->
+                    attempt("load candidate $name", silent = true) {
+                        val cls = loadClassFlexible(cl, name)
+                        cls?.declaredFields?.firstOrNull { Modifier.isStatic(it.modifiers) && targetClass.isAssignableFrom(it.type) }?.apply { isAccessible = true }?.get(null)
+                    }
+                }
+            }
     }
 
     fun hookDatabaseReferenceWrites(
@@ -461,6 +472,7 @@ object LocalCloudUnlockHook : HookHandler {
 
                         val payload = chain.args.firstOrNull()
                         if (payload != null) {
+                            CloudDatabaseManager.updateDbFromWrite(path, payload, context, prefs)
                             bgExecutor.execute {
                                 dispatchMetadataToCloud(context, path, payload, classLoader)
                             }
@@ -610,7 +622,8 @@ object LocalCloudUnlockHook : HookHandler {
         if (queryClass == null) return
 
         queryClass.methods.filter {
-            it.name in listOf("addListenerForSingleValueEvent", "addValueEventListener", "a", "b", "c")
+            it.parameterCount == 1 && !it.parameterTypes[0].isPrimitive &&
+            it.name in listOf("addListenerForSingleValueEvent", "addValueEventListener", "b", "c")
         }.forEach { m ->
             attempt("hook Query.${m.name}") {
                 module.hookTracked(m, idPrefix = "local-cloud-query-${m.name}").intercept { chain ->
@@ -618,35 +631,19 @@ object LocalCloudUnlockHook : HookHandler {
 
                     val query = chain.thisObject ?: return@intercept chain.proceed()
                     val path = query.toString()
-                    if (!path.contains("cloud_v1") && !path.contains("apps")) return@intercept chain.proceed()
-
                     val listener = chain.args.firstOrNull() ?: return@intercept chain.proceed()
 
                     Log.d(TAG, "[LocalCloudUnlock] Intercepted Query.${m.name} for path: $path")
 
-                    CloudDiscoveryHook.ensureScan(context, classLoader, targets)
-                    val allApps = CloudDiscoveryHook.getAllDiscoveredApps()
-
-                    val targetPkg = extractRegexGroup(path, "apps/([^/?&#]+)", 1)
-                    val syntheticSnapshot = if (!targetPkg.isNullOrBlank()) {
-                        val matchingApps = CloudDiscoveryHook.findMatchingBackups(targetPkg)
-                        if (matchingApps.isNotEmpty()) {
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSyntheticSnapshot(classLoader, query, matchingApps)
-                        } else {
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(classLoader, query, emptyMap())
-                        }
-                    } else {
-                        val groupedMap = allApps.groupBy { it.sanitizedAppId }.mapValues { (_, appsForPkg) ->
-                            CloudDiscoveryHook.FirebaseSnapshotSynthesizer.buildMetadataMap(appsForPkg)
-                        }
-                        CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(classLoader, query, groupedMap)
-                    }
+                    val syntheticSnapshot = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotForPath(
+                        classLoader, query, path, context, targets, prefs
+                    )
 
                     if (syntheticSnapshot != null) {
                         mainHandler.post {
                             attempt("dispatch synthetic onDataChange to listener") {
                                 val onDataChangeMethod = listener.javaClass.methods.firstOrNull { candidate ->
-                                    candidate.parameterCount == 1 && (
+                                    candidate.parameterCount == 1 && candidate.name != "equals" && (
                                         candidate.name == "onDataChange" ||
                                         candidate.parameterTypes[0].isAssignableFrom(syntheticSnapshot.javaClass) ||
                                         syntheticSnapshot.javaClass.isAssignableFrom(candidate.parameterTypes[0])

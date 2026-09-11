@@ -600,12 +600,12 @@ object CloudDiscoveryHook : HookHandler {
             apps.associate { it.backupId to buildSingleBackupMap(it) }
 
         /**
-         * Creates a synthetic DataSnapshot from an arbitrary map hierarchy.
+         * Creates a synthetic DataSnapshot from an arbitrary data structure (Map, Boolean, Int, etc.).
          */
         internal fun createSnapshotFromMap(
             classLoader: ClassLoader,
             queryRef: Any,
-            dataMap: Map<String, Any>
+            data: Any?
         ): Any? = attempt("createSnapshotFromMap", silent = true) {
             val fb = resolveFirebaseClasses(classLoader) ?: return@attempt null
 
@@ -616,9 +616,9 @@ object CloudDiscoveryHook : HookHandler {
 
             val nodeObj = if (nodeFromJson != null) {
                 if (nodeFromJson.parameterCount == 2) {
-                    nodeFromJson.invoke(null, dataMap, null)
+                    nodeFromJson.invoke(null, data, null)
                 } else {
-                    nodeFromJson.invoke(null, dataMap)
+                    nodeFromJson.invoke(null, data)
                 }
             } else {
                 null
@@ -650,11 +650,7 @@ object CloudDiscoveryHook : HookHandler {
                 } ?: fb.dataSnapshot.constructors.firstOrNull { it.parameterCount == 2 }
 
             if (ctor == null) {
-                Log.w(SYNTH_TAG, "No matching DataSnapshot constructor found. Available: ${
-                    fb.dataSnapshot.constructors.joinToString { c ->
-                        "(${c.parameterTypes.joinToString { it.simpleName }})"
-                    }
-                }")
+                Log.w(SYNTH_TAG, "No matching DataSnapshot constructor found.")
                 return@attempt null
             }
 
@@ -668,6 +664,18 @@ object CloudDiscoveryHook : HookHandler {
             }
 
             ctor.newInstance(resolvedQueryRef, indexedNodeObj)
+        }
+
+        fun createSnapshotForPath(
+            classLoader: ClassLoader,
+            queryRef: Any,
+            path: String,
+            context: Context,
+            targets: ResolvedTargets,
+            prefs: PreferencesManager
+        ): Any? {
+            val data = CloudDatabaseManager.getSnapshotDataForPath(path, context, classLoader, targets, prefs)
+            return createSnapshotFromMap(classLoader, queryRef, data)
         }
 
         /**
@@ -865,6 +873,7 @@ object CloudDiscoveryHook : HookHandler {
             val appCloudBackupsClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackups") ?: return null
             val appBackupsCtor = appCloudBackupsClass.getConstructor(List::class.java)
             val cloudBackups = apps.mapNotNull { buildAppCloudBackup(it, classLoader) }
+            if (cloudBackups.isEmpty()) return null
             appBackupsCtor.newInstance(cloudBackups)
         }
 
@@ -874,63 +883,171 @@ object CloudDiscoveryHook : HookHandler {
         return File(dir, CACHE_FILE_NAME)
     }
 
-    @SuppressLint("SdCardPath")
-    private fun loadDiskCache(context: Context) {
-        try {
-            val cacheFile = getCanonicalCacheFile()
-            // Check canonical file first, fallback to legacy internal app file if migrating
-            val legacyFile = File(context.filesDir?.parentFile, CACHE_FILE_NAME)
-            val fileToRead = when {
-                cacheFile.exists() && cacheFile.canRead() -> cacheFile
-                legacyFile.exists() && legacyFile.canRead() -> {
-                    // Migrate legacy file to canonical location
-                    try {
-                        legacyFile.copyTo(cacheFile, overwrite = true)
-                        legacyFile.delete()
-                    } catch (_: Throwable) {}
-                    cacheFile
-                }
-                else -> null
-            }
+    fun loadDatabaseJson(root: JSONObject) {
+        attempt("loadDatabaseJson", silent = true) {
+            CloudDatabaseManager.currentDbJson = root
+            val usersObj = root.optJSONObject("users") ?: return@attempt
+            val userKeys = usersObj.keys()
+            while (userKeys.hasNext()) {
+                val uid = userKeys.next()
+                val userObj = usersObj.optJSONObject(uid) ?: continue
+                val cloudV1 = userObj.optJSONObject("cloud_v1") ?: continue
+                val cloudDirs = cloudV1.keys()
+                while (cloudDirs.hasNext()) {
+                    val cloudDir = cloudDirs.next()
+                    val cloudDirObj = cloudV1.optJSONObject(cloudDir) ?: continue
+                    val tagsObj = cloudDirObj.optJSONObject("tags") ?: continue
+                    val tagKeys = tagsObj.keys()
+                    while (tagKeys.hasNext()) {
+                        val tag = tagKeys.next()
+                        val tagObj = tagsObj.optJSONObject(tag) ?: continue
 
-            if (fileToRead != null && fileToRead.exists()) {
-                val root = JSONObject(fileToRead.readText(StandardCharsets.UTF_8))
-                
-                val appsObj = root.optJSONObject("apps") ?: root
-                appsObj.keys().forEach { pkg ->
-                    if (AppUtils.isValidPackageName(pkg)) {
-                        val appArray = appsObj.optJSONArray(pkg)
-                        if (appArray != null) {
-                            for (i in 0 until appArray.length()) {
-                                appArray.optJSONObject(i)?.let { appJson ->
-                                    addDiscoveredBackup(DiscoveredCloudApp.fromJson(pkg, appJson))
+                        val appsObj = tagObj.optJSONObject("apps")
+                        if (appsObj != null) {
+                            val appKeys = appsObj.keys()
+                            while (appKeys.hasNext()) {
+                                val sanitizedId = appKeys.next()
+                                val pkgBackupsObj = appsObj.optJSONObject(sanitizedId) ?: continue
+                                val backupIds = pkgBackupsObj.keys()
+                                while (backupIds.hasNext()) {
+                                    val backupId = backupIds.next()
+                                    val bObj = pkgBackupsObj.optJSONObject(backupId) ?: continue
+                                    val pkgName = bObj.optString("packageName").takeIf { it.isNotBlank() } ?: sanitizedId
+                                    val app = DiscoveredCloudApp(
+                                        packageName = pkgName,
+                                        sanitizedAppId = bObj.optString("appId", sanitizedId),
+                                        backupId = backupId,
+                                        backupTag = bObj.optString("backupTag", tag),
+                                        appName = bObj.optString("name").takeIf { it.isNotBlank() },
+                                        apkLink = bObj.optString("apkLink").takeIf { it.isNotBlank() },
+                                        apkSize = bObj.optLong("apkSize", 0L),
+                                        apkBackupDate = bObj.optLong("apkBackupDate", 0L),
+                                        dataLink = bObj.optString("dataLink").takeIf { it.isNotBlank() },
+                                        dataSize = bObj.optLong("dataSize", 0L),
+                                        dataBackupDate = bObj.optLong("dataBackupDate", 0L),
+                                        extDataLink = bObj.optString("extDataLink").takeIf { it.isNotBlank() },
+                                        extDataSize = bObj.optLong("extDataSize", 0L),
+                                        extDataBackupDate = bObj.optLong("extDataBackupDate", 0L),
+                                        splitsLink = bObj.optString("splitsLink").takeIf { it.isNotBlank() },
+                                        splitsSize = bObj.optLong("splitsSize", 0L),
+                                        splitsBackupDate = bObj.optLong("splitsBackupDate", 0L),
+                                        extraLink = bObj.optString("specialDataLink").takeIf { it.isNotBlank() },
+                                        extraSize = bObj.optLong("specialDataSize", 0L),
+                                        totalSize = bObj.optLong("totalSize", 0L),
+                                        ssaid = bObj.optString("ssaid").takeIf { it.isNotBlank() },
+                                        permissionStatesCsv = bObj.optString("permissionStatesCsv").takeIf { it.isNotBlank() },
+                                        notificationPolicyXml = bObj.optString("notificationPolicyXml").takeIf { it.isNotBlank() },
+                                        versionCode = bObj.optLong("versionCode", 1L),
+                                        versionName = bObj.optString("versionName", "1.0"),
+                                        dateBackup = bObj.optLong("dateBackup", System.currentTimeMillis()),
+                                        provider = bObj.optString("provider", "Generic")
+                                    )
+                                    addDiscoveredBackup(app)
                                 }
                             }
-                        } else {
-                            val appJson = appsObj.optJSONObject(pkg)
-                            if (appJson != null) {
-                                addDiscoveredBackup(DiscoveredCloudApp.fromJson(pkg, appJson))
+                        }
+
+                        val foldersObj = tagObj.optJSONObject("folders")
+                        if (foldersObj != null) {
+                            val fKeys = foldersObj.keys()
+                            while (fKeys.hasNext()) {
+                                val fid = fKeys.next()
+                                val fObj = foldersObj.optJSONObject(fid) ?: continue
+                                discoveredFolders[fid] = DiscoveredCloudFolder.fromJson(fid, fObj)
+                            }
+                        }
+
+                        val smsCount = tagObj.optInt("smsBackupsCount", -1)
+                        if (smsCount > 0) {
+                            for (s in 0 until smsCount) {
+                                val sId = "sms_backup_$s"
+                                discoveredSms[sId] = DiscoveredCloudSms(sId, "SMS Backup $s", 0L, smsCount, tag, System.currentTimeMillis())
+                            }
+                        }
+                        val callCount = tagObj.optInt("callLogBackupsCount", -1)
+                        if (callCount > 0) {
+                            for (c in 0 until callCount) {
+                                val cId = "call_backup_$c"
+                                discoveredCalls[cId] = DiscoveredCloudCall(cId, "Call Log $c", 0L, callCount, tag, System.currentTimeMillis())
                             }
                         }
                     }
-                }
 
-                root.optJSONObject("folders")?.let { obj ->
-                    obj.keys().forEach { fid -> obj.optJSONObject(fid)?.let { discoveredFolders[fid] = DiscoveredCloudFolder.fromJson(fid, it) } }
-                }
-                fun <T> loadSection(key: String, map: MutableMap<String, T>, parser: (JSONObject) -> T) {
-                    root.optJSONObject(key)?.let { obj ->
-                        obj.keys().forEach { id -> obj.optJSONObject(id)?.let { map[id] = parser(it) } }
+                    val wallsObj = cloudDirObj.optJSONObject("walls")
+                    val wallsCount = wallsObj?.optInt("wallsBackupCount", 0) ?: 0
+                    if (wallsCount > 0) {
+                        for (w in 0 until wallsCount) {
+                            val wId = "wall_backup_$w"
+                            discoveredWalls[wId] = DiscoveredCloudWall(wId, "Wallpaper $w", 0L, System.currentTimeMillis())
+                        }
                     }
                 }
-                loadSection("calls", discoveredCalls, DiscoveredCloudCall::fromJson)
-                loadSection("sms", discoveredSms, DiscoveredCloudSms::fromJson)
-                loadSection("walls", discoveredWalls, DiscoveredCloudWall::fromJson)
-                loadSection("wifi", discoveredWifi, DiscoveredCloudWifi::fromJson)
+            }
+        }
+    }
 
-                val allAppsCount = getAllDiscoveredApps().size
-                lastScanTime = fileToRead.lastModified()
-                Log.i(TAG, "[CloudDiscovery] Loaded $allAppsCount apps (${discoveredBackups.size} packages), ${discoveredFolders.size} folders, ${discoveredCalls.size} calls, ${discoveredSms.size} sms, ${discoveredWalls.size} walls, ${discoveredWifi.size} wifi from cache: ${fileToRead.absolutePath}")
+    private fun loadLegacyDiskCache(root: JSONObject) {
+        val appsObj = root.optJSONObject("apps") ?: root
+        appsObj.keys().forEach { pkg ->
+            if (AppUtils.isValidPackageName(pkg)) {
+                val appArray = appsObj.optJSONArray(pkg)
+                if (appArray != null) {
+                    for (i in 0 until appArray.length()) {
+                        appArray.optJSONObject(i)?.let { appJson ->
+                            addDiscoveredBackup(DiscoveredCloudApp.fromJson(pkg, appJson))
+                        }
+                    }
+                } else {
+                    val appJson = appsObj.optJSONObject(pkg)
+                    if (appJson != null) {
+                        addDiscoveredBackup(DiscoveredCloudApp.fromJson(pkg, appJson))
+                    }
+                }
+            }
+        }
+
+        root.optJSONObject("folders")?.let { obj ->
+            obj.keys().forEach { fid -> obj.optJSONObject(fid)?.let { discoveredFolders[fid] = DiscoveredCloudFolder.fromJson(fid, it) } }
+        }
+        fun <T> loadSection(key: String, map: MutableMap<String, T>, parser: (JSONObject) -> T) {
+            root.optJSONObject(key)?.let { obj ->
+                obj.keys().forEach { id -> obj.optJSONObject(id)?.let { map[id] = parser(it) } }
+            }
+        }
+        loadSection("calls", discoveredCalls, DiscoveredCloudCall::fromJson)
+        loadSection("sms", discoveredSms, DiscoveredCloudSms::fromJson)
+        loadSection("walls", discoveredWalls, DiscoveredCloudWall::fromJson)
+        loadSection("wifi", discoveredWifi, DiscoveredCloudWifi::fromJson)
+    }
+
+    @SuppressLint("SdCardPath")
+    private fun loadDiskCache(context: Context) {
+        try {
+            val candidateFiles = listOfNotNull(
+                getCanonicalCacheFile(),
+                File("/sdcard/SwiftBackup", CACHE_FILE_NAME),
+                File(context.filesDir?.parentFile, CACHE_FILE_NAME)
+            )
+
+            for (fileToRead in candidateFiles) {
+                if (fileToRead.exists() && fileToRead.canRead()) {
+                    val txt = fileToRead.readText(StandardCharsets.UTF_8).trim()
+                    if (!txt.startsWith("{")) continue
+                    val root = JSONObject(txt)
+                    if (root.has("users")) {
+                        loadDatabaseJson(root)
+                        val allAppsCount = getAllDiscoveredApps().size
+                        lastScanTime = fileToRead.lastModified()
+                        Log.i(TAG, "[CloudDiscovery] Loaded $allAppsCount apps (${discoveredBackups.size} packages) from database JSON cache: ${fileToRead.absolutePath}")
+                        return
+                    } else if (root.has("apps") || root.length() > 0) {
+                        loadLegacyDiskCache(root)
+                        val allAppsCount = getAllDiscoveredApps().size
+                        lastScanTime = fileToRead.lastModified()
+                        Log.i(TAG, "[CloudDiscovery] Loaded $allAppsCount apps from legacy cache: ${fileToRead.absolutePath}")
+                        return
+                    }
+                }
             }
         } catch (t: Throwable) {
             Log.d(TAG, "[CloudDiscovery] Error loading cache: ${t.message}")
@@ -939,31 +1056,22 @@ object CloudDiscoveryHook : HookHandler {
 
     private fun saveDiskCache(context: Context) {
         try {
-            val root = JSONObject()
-            val appsObj = JSONObject()
-            discoveredBackups.forEach { (pkg, appList) ->
-                val arr = JSONArray()
-                appList.forEach { app -> arr.put(app.toJson()) }
-                appsObj.put(pkg, arr)
-            }
-            root.put("apps", appsObj)
+            val db = CloudDatabaseManager.buildDatabaseFromDiscovered(
+                context,
+                ClassLoader.getSystemClassLoader(),
+                ResolvedTargets(),
+                preferences ?: PreferencesManager(attempt("get sp", silent = true) { context.getSharedPreferences(Consts.PREFS_SETTINGS, Context.MODE_PRIVATE) })
+            )
+            val jsonStr = db.toString(2)
 
-            fun <T> putSection(key: String, map: Map<String, T>, serializer: (T) -> JSONObject) {
-                val obj = JSONObject()
-                map.forEach { (k, v) -> obj.put(k, serializer(v)) }
-                root.put(key, obj)
-            }
-            putSection("folders", discoveredFolders) { it.toJson() }
-            putSection("calls", discoveredCalls) { it.toJson() }
-            putSection("sms", discoveredSms) { it.toJson() }
-            putSection("walls", discoveredWalls) { it.toJson() }
-            putSection("wifi", discoveredWifi) { it.toJson() }
-
-            val jsonStr = root.toString(2)
             val cacheFile = getCanonicalCacheFile()
             cacheFile.writeText(jsonStr, StandardCharsets.UTF_8)
             cacheFile.setReadable(true, false)
-            Log.d(TAG, "[CloudDiscovery] Saved cloud discovery cache to ${cacheFile.absolutePath}")
+
+            CloudDatabaseManager.currentDbJson = db
+            Log.d(TAG, "[CloudDiscovery] Saved cloud discovery cache in Firebase DB format to ${cacheFile.absolutePath}")
+
+            CloudDatabaseManager.syncDbToCloud(context)
         } catch (t: Throwable) {
             Log.w(TAG, "[CloudDiscovery] Failed to save cache: ${t.message}")
         }
@@ -1036,11 +1144,15 @@ object CloudDiscoveryHook : HookHandler {
     }
 
     private fun isResultEmpty(result: Any): Boolean = attempt("check isResultEmpty", silent = true) {
-        val cloudBackups = result.javaClass.getDeclaredMethod("getAppCloudBackups").invoke(result) ?: return@attempt true
+        val appCloudBackups = attempt("from C0014a", silent = true) {
+            result.javaClass.methods.firstOrNull { it.name == "getAppCloudBackups" }?.invoke(result)
+        } ?: result
+
         val backupsList = attempt("getBackups", silent = true) {
-            cloudBackups.javaClass.getDeclaredMethod("getBackups").invoke(cloudBackups) as? List<*>
-        } ?: attempt("field a", silent = true) {
-            cloudBackups.getFieldValue("a") as? List<*>
+            appCloudBackups.javaClass.methods.firstOrNull { it.name == "getBackups" }?.invoke(appCloudBackups) as? List<*>
+        } ?: attempt("field a/backups", silent = true) {
+            (appCloudBackups.getFieldValue("backups") as? List<*>)
+                ?: (appCloudBackups.getFieldValue("a") as? List<*>)
         }
         backupsList == null || backupsList.isEmpty()
     } ?: false
@@ -1066,44 +1178,106 @@ object CloudDiscoveryHook : HookHandler {
     fun buildAppCloudBackup(app: DiscoveredCloudApp, classLoader: ClassLoader): Any? = attempt("build AppCloudBackup", silent = true) {
         val metaClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.CloudMetadata") ?: return null
         val backupClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.model.app.AppCloudBackup") ?: return null
-        val metaCtor = metaClass.constructors.first { it.parameterCount >= 60 }
+
+        val metaObj = metaClass.constructors.firstOrNull { it.parameterCount == 0 }?.newInstance()
+            ?: attempt("allocateInstance", silent = true) {
+                val unsafeField = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe").apply { isAccessible = true }
+                val unsafe = unsafeField.get(null)
+                unsafe.javaClass.getMethod("allocateInstance", Class::class.java).invoke(unsafe, metaClass)
+            } ?: return null
+
         val now = app.dateBackup
         val apkDate = if (app.apkBackupDate > 0) app.apkBackupDate else now
         val dataDate = if (app.dataBackupDate > 0) app.dataBackupDate else now
         val extDataDate = if (app.extDataBackupDate > 0) app.extDataBackupDate else now
         val splitsDate = if (app.splitsBackupDate > 0) app.splitsBackupDate else now
-        val args = arrayOfNulls<Any>(metaCtor.parameterCount)
 
-        fun set(idx: Int, value: Any?) { if (idx < args.size) args[idx] = value }
+        setProp(metaObj, "packageName", app.packageName)
+        setProp(metaObj, "name", app.appName ?: app.packageName)
+        setProp(metaObj, "dateBackup", now)
+        setProp(metaObj, "dateBackupUpdated", now)
+        setProp(metaObj, "versionName", app.versionName)
+        setProp(metaObj, "versionCode", app.versionCode)
 
-        set(0, app.packageName)
-        set(1, app.appName ?: app.packageName)
-        set(2, now)
-        set(3, now)
-        set(4, app.versionName)
-        set(5, app.versionCode)
-        set(6, app.apkLink)
-        if (app.apkSize > 0) set(7, app.apkSize)
-        if (app.apkLink != null) { set(8, apkDate); set(9, 580L); set(10, "v4.2.3") }
-        set(11, app.splitsLink)
-        if (app.splitsSize > 0) set(12, app.splitsSize)
-        if (app.splitsLink != null) { set(13, splitsDate); set(14, 580L); set(15, "v4.2.3") }
-        set(21, app.dataLink)
-        if (app.dataSize > 0) set(22, app.dataSize)
-        if (app.dataLink != null) { set(23, dataDate); set(24, true); set(25, "StandardEncryption"); set(27, dataDate); set(28, 580L); set(29, "v4.2.3") }
-        set(30, app.extDataLink)
-        if (app.extDataSize > 0) set(31, app.extDataSize)
-        if (app.extDataLink != null) { set(32, extDataDate); set(33, true); set(34, "StandardEncryption"); set(36, extDataDate); set(37, 580L); set(38, "v4.2.3") }
-        set(54, 580L)
-        set(56, app.permissionStatesCsv)
-        set(58, app.extraLink)
-        if (app.extraSize > 0) set(59, app.extraSize)
-        set(61, app.ssaid)
-        set(63, false)
-        set(65, 1)
+        if (!app.apkLink.isNullOrBlank()) {
+            setProp(metaObj, "apkLink", app.apkLink)
+            if (app.apkSize > 0) setProp(metaObj, "apkSize", app.apkSize)
+            setProp(metaObj, "apkBackupDate", apkDate)
+            setProp(metaObj, "apkSBVersionCodeRequired", 580L)
+            setProp(metaObj, "apkSBVersionNameRequired", "v4.2.3")
+        }
 
-        val metaObj = metaCtor.newInstance(*args)
-        backupClass.getConstructor(String::class.java, metaClass).newInstance(app.backupId, metaObj)
+        if (!app.splitsLink.isNullOrBlank()) {
+            setProp(metaObj, "splitsLink", app.splitsLink)
+            if (app.splitsSize > 0) setProp(metaObj, "splitsSize", app.splitsSize)
+            setProp(metaObj, "splitsBackupDate", splitsDate)
+            setProp(metaObj, "splitsSBVersionCodeRequired", 580L)
+            setProp(metaObj, "splitsSBVersionNameRequired", "v4.2.3")
+        }
+
+        if (!app.dataLink.isNullOrBlank()) {
+            setProp(metaObj, "dataLink", app.dataLink)
+            if (app.dataSize > 0) {
+                setProp(metaObj, "dataSize", app.dataSize)
+                setProp(metaObj, "dataSizeMirrored", app.dataSize)
+            }
+            setProp(metaObj, "dataBackupDate", dataDate)
+            setProp(metaObj, "isDataEncrypted", true)
+            setProp(metaObj, "dataEncryptionMethod", "StandardEncryption")
+            setProp(metaObj, "dataSBVersionCodeRequired", 580L)
+            setProp(metaObj, "dataSBVersionNameRequired", "v4.2.3")
+        }
+
+        if (!app.extDataLink.isNullOrBlank()) {
+            setProp(metaObj, "extDataLink", app.extDataLink)
+            if (app.extDataSize > 0) {
+                setProp(metaObj, "extDataSize", app.extDataSize)
+                setProp(metaObj, "extDataSizeMirrored", app.extDataSize)
+            }
+            setProp(metaObj, "extDataBackupDate", extDataDate)
+            setProp(metaObj, "isExtDataEncrypted", true)
+            setProp(metaObj, "extDataEncryptionMethod", "StandardEncryption")
+            setProp(metaObj, "extDataSBVersionCodeRequired", 580L)
+            setProp(metaObj, "extDataSBVersionNameRequired", "v4.2.3")
+        }
+
+        if (!app.extraLink.isNullOrBlank()) {
+            setProp(metaObj, "specialDataLink", app.extraLink)
+            if (app.extraSize > 0) setProp(metaObj, "specialDataSize", app.extraSize)
+        }
+
+        app.ssaid?.let { setProp(metaObj, "ssaid", it) }
+        app.permissionStatesCsv?.let { setProp(metaObj, "permissionStatesCsv", it) }
+        setProp(metaObj, "minSBVersionCodeRequired", 580L)
+        setProp(metaObj, "_protectedBackup", false)
+        setProp(metaObj, "keyVersion", 1)
+
+        val backupCtor = backupClass.constructors.firstOrNull { it.parameterCount == 2 && it.parameterTypes[0] == String::class.java }
+            ?: backupClass.getConstructor(String::class.java, metaClass)
+        backupCtor.newInstance(app.backupId, metaObj)
+    }
+
+    private fun setProp(obj: Any, name: String, value: Any?) {
+        if (value == null) return
+        try {
+            var cls: Class<*>? = obj.javaClass
+            while (cls != null && cls != Any::class.java) {
+                val field = cls.declaredFields.firstOrNull { it.name == name }
+                if (field != null) {
+                    field.isAccessible = true
+                    field.set(obj, value)
+                    return
+                }
+                cls = cls.superclass
+            }
+            val setterName = "set" + name.replaceFirstChar { it.uppercase(Locale.ROOT) }
+            val method = obj.javaClass.declaredMethods.firstOrNull { it.name == setterName && it.parameterCount == 1 }
+                ?: obj.javaClass.methods.firstOrNull { it.name == setterName && it.parameterCount == 1 }
+            if (method != null) {
+                method.isAccessible = true
+                method.invoke(obj, value)
+            }
+        } catch (_: Throwable) {}
     }
 
     fun discoverAllCloudBackups(
@@ -1126,6 +1300,25 @@ object CloudDiscoveryHook : HookHandler {
         if (providerResults.isEmpty()) {
             Log.d(TAG, "[CloudDiscovery] No cloud providers returned items")
             return 0
+        }
+
+        // Fast Path: Check if cloud_discovered_cache.json is on cloud drive
+        for (prov in providerResults) {
+            val dbItem = prov.items.firstOrNull { it.name.equals(CACHE_FILE_NAME, ignoreCase = true) }
+            if (dbItem != null) {
+                Log.i(TAG, "[CloudDiscovery] Found remote database JSON '${dbItem.name}' on ${prov.scanner.providerName}! Loading directly...")
+                val content = prov.scanner.downloadFileText(context, sp, dbItem)
+                if (!content.isNullOrBlank() && content.startsWith("{")) {
+                    val root = JSONObject(content)
+                    if (root.has("users")) {
+                        loadDatabaseJson(root)
+                        saveDiskCache(context)
+                        val appCount = getAllDiscoveredApps().size
+                        Log.i(TAG, "[CloudDiscovery] Instantly loaded $appCount cloud backups from remote database JSON without manual indexing!")
+                        return appCount
+                    }
+                }
+            }
         }
 
         val appRegex = Pattern.compile("^(.*?)\\.([a-z]+)\\s+\\((.*?)\\)\\s+\\(id-(.*?)\\)$")
