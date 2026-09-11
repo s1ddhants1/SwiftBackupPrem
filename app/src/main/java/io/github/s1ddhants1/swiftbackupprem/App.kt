@@ -10,8 +10,6 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class App : Application() {
     companion object {
-        var xposedService: XposedService? = null
-            private set
         private val _serviceState = MutableStateFlow<XposedService?>(null)
         val serviceState = _serviceState.asStateFlow()
     }
@@ -22,14 +20,12 @@ class App : Application() {
             XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
                 override fun onServiceBind(service: XposedService) {
                     Log.i(Consts.TAG, "Connected to Xposed Framework: ${service.frameworkName} v${service.frameworkVersion} (API ${service.apiVersion})")
-                    xposedService = service
                     _serviceState.value = service
                 }
 
                 override fun onServiceDied(service: XposedService) {
                     Log.w(Consts.TAG, "Xposed Framework Service disconnected")
-                    if (xposedService == service) {
-                        xposedService = null
+                    if (_serviceState.value == service) {
                         _serviceState.value = null
                     }
                 }

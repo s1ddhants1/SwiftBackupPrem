@@ -124,10 +124,6 @@ class Module : XposedModule() {
         CloudDiscoveryHook.apply(this, ctx, cl, targets, prefs)
         LocalCloudUnlockHook.apply(this, ctx, cl, targets, prefs)
 
-        if (swiftAppInstance != null) {
-            PremiumFeatureHook.hookSwiftAppPremium(this, swiftAppInstance, prefs.enablePremium)
-        }
-
         // Export detected UIDs and auth state to shared storage for Manager app / Migrator UI
         attempt("export detected UIDs and auth state to storage", silent = true) {
             val uids = BackupCrypto.resolveCandidateUids(ctx, cl, targets)

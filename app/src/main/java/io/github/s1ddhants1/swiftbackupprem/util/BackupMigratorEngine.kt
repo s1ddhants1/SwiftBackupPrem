@@ -46,7 +46,6 @@ object BackupMigratorEngine {
         val sourceUid: String,
         val targetMode: TargetEncryptionMode = TargetEncryptionMode.Anonymous(),
         val targetDir: File,
-        val overwriteExisting: Boolean = true,
         val syncToFirebase: Boolean = false,
         val firebaseDbUrl: String? = null,
         val firebaseApiKey: String? = null,

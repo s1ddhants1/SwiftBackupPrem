@@ -59,32 +59,6 @@ object CloudScannerRegistry {
     }
 
 
-    fun uploadToActiveProviders(
-        context: Context,
-        remoteRelativePath: String,
-        file: File
-    ): Boolean {
-        val sp: SharedPreferences = attempt("get swiftbackup main prefs", silent = true) {
-            context.getSharedPreferences("org.swiftapps.swiftbackup_preferences", Context.MODE_PRIVATE)
-        } ?: return false
-        val aggregatedPrefs = buildAggregatedPreferences(context, sp)
-        var anySuccess = false
-        for (scanner in scanners) {
-            try {
-                if (scanner.isConfigured(context, aggregatedPrefs)) {
-                    val ok = scanner.uploadFile(context, aggregatedPrefs, remoteRelativePath, file)
-                    if (ok) {
-                        Log.i(TAG, "[CloudScannerRegistry] Successfully uploaded $remoteRelativePath to ${scanner.providerName}")
-                        anySuccess = true
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "[CloudScannerRegistry] Failed to upload $remoteRelativePath to ${scanner.providerName}: ${t.message}")
-            }
-        }
-        return anySuccess
-    }
-
     fun uploadTextToActiveProviders(
         context: Context,
         remoteRelativePath: String,

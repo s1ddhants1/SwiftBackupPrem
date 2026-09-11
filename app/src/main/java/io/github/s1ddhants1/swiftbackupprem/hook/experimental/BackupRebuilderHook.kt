@@ -2,7 +2,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook.experimental
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Environment
 import android.util.Log
 import androidx.annotation.Keep
 import androidx.core.content.pm.PackageInfoCompat
@@ -10,18 +9,12 @@ import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.hook.HookHandler
 import io.github.s1ddhants1.swiftbackupprem.hook.ResolvedTargets
-import io.github.s1ddhants1.swiftbackupprem.hook.hookTracked
 import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
-import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
-import io.github.s1ddhants1.swiftbackupprem.util.loadClassFlexible
 import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 
 /**
  * Hook and engine that automatically detects, decrypts, and reconstructs missing
@@ -33,22 +26,9 @@ object BackupRebuilderHook : HookHandler {
     private const val TAG = Consts.TAG
 
     private fun logI(msg: String) { try { Log.i(TAG, "[BackupRebuilder] $msg") } catch (_: Throwable) {} }
-    private fun logE(msg: String) { try { Log.e(TAG, "[BackupRebuilder] $msg") } catch (_: Throwable) {} }
-    private fun logD(msg: String) { try { Log.d(TAG, "[BackupRebuilder] $msg") } catch (_: Throwable) {} }
-
-    @Volatile
-    private var rebuildExecutor: ScheduledExecutorService = createRebuildExecutor()
-
-    private fun createRebuildExecutor(): ScheduledExecutorService =
-        Executors.newSingleThreadScheduledExecutor { r ->
-            Thread(r, "SBP-BackupRebuilder").apply { isDaemon = true }
-        }
 
     fun shutdown() {
-        try {
-            rebuildExecutor.shutdownNow()
-        } catch (_: Throwable) {}
-        rebuildExecutor = createRebuildExecutor()
+        // Lifecycle reset on hot reload
     }
 
     private data class BackupSlice(
@@ -58,9 +38,6 @@ object BackupRebuilderHook : HookHandler {
         val encryptedKey: String? = null,
         val encryptionMethodKey: String? = null
     )
-
-    @Volatile
-    private var preferences: PreferencesManager? = null
 
     override fun apply(
         module: XposedModule,
@@ -73,11 +50,6 @@ object BackupRebuilderHook : HookHandler {
         // Cloud backup metadata reconstruction is bound to Universal Cloud Discovery,
         // and local migration reconstructs metadata by default within BackupMigratorEngine.
     }
-
-    data class AppVersionInfo(
-        val versionCode: Long = 1L,
-        val versionName: String = "1.0"
-    )
 
     fun resolveAppLabel(context: Context?, pkgName: String, backupDir: File? = null): String {
         if (context != null) {
@@ -106,159 +78,6 @@ object BackupRebuilderHook : HookHandler {
             }
         }
         return pkgName
-    }
-
-    fun resolveAppVersion(context: Context?, pkgName: String, backupDir: File? = null): AppVersionInfo {
-        if (context != null) {
-            attempt("resolve version for installed $pkgName", silent = true) {
-                val pm = context.packageManager
-                val pInfo = pm.getPackageInfo(pkgName, 0)
-                val code = PackageInfoCompat.getLongVersionCode(pInfo)
-                val name = pInfo.versionName ?: "1.0"
-                if (code > 0L || name.isNotBlank()) {
-                    return AppVersionInfo(if (code > 0L) code else 1L, name.ifBlank { "1.0" })
-                }
-            }
-            if (backupDir != null && backupDir.exists()) {
-                val apkFile = File(backupDir, "$pkgName.app").takeIf { it.exists() }
-                    ?: File(backupDir, "$pkgName.apk").takeIf { it.exists() }
-                if (apkFile != null) {
-                    attempt("resolve version from apk $pkgName", silent = true) {
-                        val pm = context.packageManager
-                        val info = pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
-                        if (info != null) {
-                            val code = PackageInfoCompat.getLongVersionCode(info)
-                            val name = info.versionName ?: "1.0"
-                            return AppVersionInfo(if (code > 0L) code else 1L, name.ifBlank { "1.0" })
-                        }
-                    }
-                }
-            }
-        }
-        return AppVersionInfo(1L, "1.0")
-    }
-
-    fun rebuildFromBackupInstance(
-        backupInstance: Any,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets,
-        context: Context? = null
-    ): Boolean = attempt("rebuildFromBackupInstance", silent = true) {
-        val stringFields = backupInstance.javaClass.declaredFields
-            .filter { it.type == String::class.java }
-            .onEach { it.isAccessible = true }
-
-        val backupId = (attempt("get backupId by name a", silent = true) {
-            backupInstance.javaClass.getDeclaredField("a").apply { isAccessible = true }.get(backupInstance) as? String
-        } ?: stringFields.getOrNull(0)?.get(backupInstance) as? String) ?: return false
-
-        val pkgName = (attempt("get pkgName by name b", silent = true) {
-            backupInstance.javaClass.getDeclaredField("b").apply { isAccessible = true }.get(backupInstance) as? String
-        } ?: stringFields.getOrNull(1)?.get(backupInstance) as? String) ?: return false
-
-        val accountsDir = File(Environment.getExternalStorageDirectory(), "SwiftBackup/accounts")
-        if (!accountsDir.exists()) return false
-
-        val candidateUids = BackupCrypto.resolveCandidateUids(context, classLoader, targets)
-        val primaryUid = candidateUids.firstOrNull() ?: "default_uid"
-        var rebuilt = false
-
-        accountsDir.listFiles { file -> file.isDirectory }?.forEach { accountFolder ->
-            val backupDir = File(accountFolder, "backups/apps/local/$pkgName/$backupId")
-            if (backupDir.isDirectory && rebuildBackupDirectory(backupDir, pkgName, backupId, classLoader, targets, primaryUid, context)) {
-                rebuilt = true
-            }
-        }
-        rebuilt
-    } ?: false
-
-    fun rebuildAllLocalBackups(
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ): Int {
-        val accountsDir = File(Environment.getExternalStorageDirectory(), "SwiftBackup/accounts")
-        if (!accountsDir.isDirectory) return 0
-
-        val candidateUids = BackupCrypto.resolveCandidateUids(context, classLoader, targets)
-        val primaryUid = candidateUids.firstOrNull() ?: "default_uid"
-        var totalRebuilt = 0
-
-        accountsDir.listFiles { f -> f.isDirectory }?.forEach { account ->
-            val appsLocalDir = File(account, "backups/apps/local")
-            if (appsLocalDir.isDirectory) {
-                appsLocalDir.listFiles { f -> f.isDirectory }?.forEach { pkgFolder ->
-                    if (!AppUtils.isValidPackageName(pkgFolder.name)) {
-                        logD("Skipping non-package directory: ${pkgFolder.name}")
-                        return@forEach
-                    }
-                    pkgFolder.listFiles { f -> f.isDirectory }?.forEach { backupDir ->
-                        if (rebuildBackupDirectory(backupDir, pkgFolder.name, backupDir.name, classLoader, targets, primaryUid, context)) {
-                            totalRebuilt++
-                        }
-                    }
-                }
-            }
-
-            val foldersLocalDir = File(account, "backups/folders/local")
-            if (foldersLocalDir.isDirectory) {
-                foldersLocalDir.listFiles { f -> f.isDirectory }?.forEach { folderDir ->
-                    if (rebuildFolderDirectory(folderDir, folderDir.name)) {
-                        totalRebuilt++
-                    }
-                }
-            }
-        }
-
-        if (totalRebuilt > 0) logI("Rebuilt $totalRebuilt missing backup metadata files across storage")
-        return totalRebuilt
-    }
-
-    @SuppressLint("SetWorldReadable", "SetWorldWritable")
-    fun rebuildFolderDirectory(folderDir: File, folderDirName: String): Boolean {
-        val metaFile = File(folderDir, "metadata.json")
-        if (metaFile.exists() && metaFile.length() > 0) return false
-
-        val fldFile = File(folderDir, "folder-base.fld")
-        val flmFile = File(folderDir, "folder-base.flm")
-        if (!fldFile.exists() && !flmFile.exists()) return false
-
-        logI("Found folder backup without metadata.json at ${folderDir.absolutePath}. Auto-reconstructing metadata...")
-
-        val cleanId = folderDirName.removePrefix("Folder-")
-        val fldSize = if (fldFile.exists()) fldFile.length() else 0L
-        val flmSize = if (flmFile.exists()) flmFile.length() else 0L
-        val now = System.currentTimeMillis()
-        val tsFormat = java.text.SimpleDateFormat("yyyyMMdd-HHmmss-SSS", java.util.Locale.US)
-        val tsStr = tsFormat.format(java.util.Date(now))
-
-        val metaJson = JSONObject().apply {
-            put("folderItem", JSONObject().apply {
-                put("id", cleanId)
-                put("displayName", "Folder-$cleanId")
-                put("sourceFolder", "/storage/emulated/0")
-                put("setupCreationTime", now)
-            })
-            put("baseBackup", JSONObject().apply {
-                put("backupLink", fldFile.absolutePath)
-                put("backupSize", fldSize)
-                put("manifestLink", flmFile.absolutePath)
-                put("manifestSize", flmSize)
-                put("originalSize", fldSize)
-                put("timestamp", tsStr)
-            })
-        }
-
-        try {
-            metaFile.writeText(metaJson.toString(2), StandardCharsets.UTF_8)
-            metaFile.setReadable(true, false)
-            metaFile.setWritable(true, false)
-            logI("Successfully generated metadata.json for folder $cleanId")
-            return true
-        } catch (t: Throwable) {
-            logE("Failed to write metadata.json for folder $cleanId: ${t.message}")
-            return false
-        }
     }
 
     @SuppressLint("SetWorldReadable", "SetWorldWritable")
@@ -375,5 +194,4 @@ object BackupRebuilderHook : HookHandler {
     fun deriveConcealKey(uid: String): ByteArray = BackupCrypto.deriveConcealKey(uid)
     fun concealDecrypt(base64Payload: String, key: ByteArray): ByteArray = BackupCrypto.concealDecrypt(base64Payload, key)
     fun concealEncrypt(plaintext: String, key: ByteArray): String = BackupCrypto.concealEncrypt(plaintext, key)
-    fun decompressZstdOrRaw(bytes: ByteArray, classLoader: ClassLoader): String? = BackupCrypto.decompressZstdOrRaw(bytes, classLoader)
 }

@@ -1,6 +1,5 @@
 package io.github.s1ddhants1.swiftbackupprem.data
 
-import io.github.s1ddhants1.swiftbackupprem.model.SbpConfig
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import org.junit.Assert.*
 import org.junit.Test

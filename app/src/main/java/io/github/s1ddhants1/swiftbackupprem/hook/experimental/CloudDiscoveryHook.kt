@@ -3,21 +3,15 @@ package io.github.s1ddhants1.swiftbackupprem.hook.experimental
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import android.widget.ImageView
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.hook.hookTracked
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.hook.HookHandler
 import io.github.s1ddhants1.swiftbackupprem.hook.ResolvedTargets
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudFileItem
-import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudScanner
 import io.github.s1ddhants1.swiftbackupprem.hook.experimental.cloudproviders.CloudScannerRegistry
 import io.github.s1ddhants1.swiftbackupprem.hook.getFieldValue
 import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
@@ -49,7 +43,6 @@ object CloudDiscoveryHook : HookHandler {
     val discoveredWalls = ConcurrentHashMap<String, DiscoveredCloudWall>()
     val discoveredWifi = ConcurrentHashMap<String, DiscoveredCloudWifi>()
 
-    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val isScanRunning = AtomicBoolean(false)
     @Volatile
     private var scanExecutor = createScanExecutor()
@@ -544,17 +537,6 @@ object CloudDiscoveryHook : HookHandler {
                 null
             }
 
-        fun extractQueryRef(snapshot: Any): Any? =
-            snapshot.getFieldValue("query")
-                ?: snapshot.getFieldValue("b")
-                ?: snapshot.getFieldValue("a")
-                ?: attempt("find query field by non-Node type", silent = true) {
-                    snapshot.javaClass.declaredFields.firstOrNull {
-                        val type = it.type
-                        !type.isPrimitive && type != String::class.java && !type.name.contains("Node")
-                    }?.apply { isAccessible = true }?.get(snapshot)
-                }
-
         internal fun buildSingleBackupMap(app: DiscoveredCloudApp): Map<String, Any> {
             val backupMap = mutableMapOf<String, Any>(
                 "appId" to app.sanitizedAppId,
@@ -765,31 +747,6 @@ object CloudDiscoveryHook : HookHandler {
             Log.i(SYNTH_TAG, "Merged $addedCount discovered backup(s) into existing RTDB snapshot (${mergedMap.size} total)")
             createSnapshotFromMap(classLoader, queryRef, mergedMap)
         }
-
-        /**
-         * Creates a synthetic DataSnapshot containing cloud sync statistics.
-         *
-         * The RTDB schema for sync stats stores aggregate counts:
-         *   { "apps": N, "cloudStorageUsed": N, "sms": N, "callLogs": N, "folders": N }
-         */
-        fun createSyncStatsSnapshot(
-            classLoader: ClassLoader,
-            queryRef: Any,
-            apps: Int,
-            cloudStorageUsed: Long,
-            sms: Int,
-            callLogs: Int,
-            folders: Int
-        ): Any? = attempt("synthesize sync stats DataSnapshot", silent = true) {
-            val statsMap = mutableMapOf<String, Any>(
-                "apps" to apps,
-                "cloudStorageUsed" to cloudStorageUsed,
-                "sms" to sms,
-                "callLogs" to callLogs,
-                "folders" to folders
-            )
-            createSnapshotFromMap(classLoader, queryRef, statsMap)
-        }
     }
 
     @Volatile
@@ -830,9 +787,6 @@ object CloudDiscoveryHook : HookHandler {
         if (p.unlockLocalCloudFeatures) return true
         return (p.customFirebaseApp || p.unlockLocalCloudFeatures) && p.enableCloudDiscovery && p.enableSnapshotInjection
     }
-
-    fun startDriveScanWithRetry(context: Context, classLoader: ClassLoader, targets: ResolvedTargets) =
-        startCloudScanWithRetry(context, classLoader, targets)
 
     @Volatile
     var lastScanTime = 0L
@@ -1180,56 +1134,6 @@ object CloudDiscoveryHook : HookHandler {
         val metaObj = metaCtor.newInstance(*args)
         backupClass.getConstructor(String::class.java, metaClass).newInstance(app.backupId, metaObj)
     }
-
-    fun buildFolderMetadata(folder: DiscoveredCloudFolder, classLoader: ClassLoader): Any? = attempt("build FolderMetadata", silent = true) {
-        val metaClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.folders.data.FolderMetadata") ?: return null
-        val itemClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.folders.data.FolderItem") ?: return null
-        val baseBackupClass = loadClassFlexible(classLoader, "org.swiftapps.swiftbackup.folders.data.FolderMetadata\$BaseBackup") ?: return null
-
-        val formattedTimestamp = attempt("format folder timestamp", silent = true) {
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(java.time.ZoneId.systemDefault())
-            formatter.format(java.time.Instant.ofEpochMilli(folder.timestamp))
-        } ?: "20260101-000000-000"
-
-        val itemCtor = itemClass.constructors.firstOrNull { it.parameterCount == 4 }
-            ?: itemClass.constructors.firstOrNull { it.parameterCount >= 4 } ?: return null
-        val itemObj = if (itemCtor.parameterCount == 4) {
-            itemCtor.newInstance(folder.id, folder.displayName, folder.sourceFolder, folder.timestamp)
-        } else {
-            val args = arrayOfNulls<Any>(itemCtor.parameterCount)
-            args[0] = folder.id; args[1] = folder.displayName; args[2] = folder.sourceFolder; args[3] = folder.timestamp
-            itemCtor.newInstance(*args)
-        }
-
-        val baseCtor = baseBackupClass.constructors.firstOrNull { it.parameterCount == 7 }
-            ?: baseBackupClass.constructors.firstOrNull { it.parameterCount >= 7 } ?: return null
-        val baseObj = if (baseCtor.parameterCount == 7) {
-            baseCtor.newInstance(
-                folder.fldLink ?: "",
-                folder.fldSize,
-                folder.totalSize,
-                folder.flmLink ?: "",
-                folder.flmSize,
-                formattedTimestamp,
-                true
-            )
-        } else {
-            val args = arrayOfNulls<Any>(baseCtor.parameterCount)
-            args[0] = folder.fldLink ?: ""; args[1] = folder.fldSize; args[2] = folder.totalSize
-            args[3] = folder.flmLink ?: ""; args[4] = folder.flmSize; args[5] = formattedTimestamp
-            args[6] = true
-            baseCtor.newInstance(*args)
-        }
-
-        val metaCtor = metaClass.getConstructor(itemClass, baseBackupClass, Map::class.java)
-        metaCtor.newInstance(itemObj, baseObj, null)
-    }
-
-    fun discoverDriveBackups(
-        context: Context,
-        classLoader: ClassLoader,
-        targets: ResolvedTargets
-    ): Int = discoverAllCloudBackups(context, classLoader, targets)
 
     fun discoverAllCloudBackups(
         context: Context,
@@ -1613,9 +1517,6 @@ object CloudDiscoveryHook : HookHandler {
         }
         null
     }
-
-    fun decompressZstdOrRaw(bytes: ByteArray, classLoader: ClassLoader): String? =
-        BackupCrypto.decompressZstdOrRaw(bytes, classLoader)
 
     fun resolveCandidateUids(context: Context?, classLoader: ClassLoader, targets: ResolvedTargets? = null): List<String> =
         BackupCrypto.resolveCandidateUids(context, classLoader, targets)

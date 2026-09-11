@@ -327,7 +327,10 @@ class CloudDiscoveryHookTest {
 
     @Test
     fun testDexScannerResolvesNodeUtilities() {
-        val baseApk = java.io.File("/home/s1ddhants1/.gemini/antigravity-ide/brain/a045d62b-0502-4275-bf69-f5c9ed351022/scratch/base.apk")
+        val apkPath = System.getenv("SWIFT_BACKUP_APK_PATH")
+            ?: System.getProperty("swift.backup.apk")
+            ?: "scratch/base.apk"
+        val baseApk = java.io.File(apkPath)
         if (baseApk.exists()) {
             val resolvedClass = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.scanApkForNodeMethod(
                 baseApk.absolutePath,

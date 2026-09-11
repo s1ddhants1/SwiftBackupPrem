@@ -11,3 +11,8 @@ local.properties
 release
 release.keystore
 .kotlin
+
+# Documentation
+/docs/
+/AGENTS.md
+/agents.md
