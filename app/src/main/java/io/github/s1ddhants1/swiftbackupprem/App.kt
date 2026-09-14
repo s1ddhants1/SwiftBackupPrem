@@ -31,5 +31,6 @@ class App : Application() {
                 }
             })
         }
+        io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.requestServicePush(this)
     }
 }

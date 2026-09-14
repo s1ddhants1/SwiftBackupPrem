@@ -18,6 +18,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 @Keep
 class Module : XposedModule() {
+    init {
+        attempt("load nativelib native library in module init", silent = true) {
+            System.loadLibrary("nativelib")
+        }
+    }
+
     private val hookHandles = ConcurrentHashMap<String, XposedInterface.HookHandle>()
 
     fun rememberHook(id: String?, handle: XposedInterface.HookHandle) {
@@ -105,6 +111,9 @@ class Module : XposedModule() {
     private fun applyHooks(ctx: Context, cl: ClassLoader, sourceDir: String, swiftAppInstance: Any? = null): Pair<ResolvedTargets, PreferencesManager>? {
         val remotePrefs = attempt("get remote preferences") { getRemotePreferences(Consts.PREFS_SETTINGS) }
         val prefs = PreferencesManager(remotePrefs, isDynamic = true)
+        if (remotePrefs == null || remotePrefs.all.isEmpty()) {
+            prefs.loadFromFallbackStorage(ctx)
+        }
 
         var targets = ResolvedTargets()
         attempt("find obfuscated classes with DexKit") {
@@ -123,8 +132,8 @@ class Module : XposedModule() {
         BackupRebuilderHook.apply(this, ctx, cl, targets, prefs)
         CloudDiscoveryHook.apply(this, ctx, cl, targets, prefs)
         LocalCloudUnlockHook.apply(this, ctx, cl, targets, prefs)
+        InAppSettingsHook.apply(this, ctx, cl, targets, prefs)
 
-        // Export detected UIDs and auth state to shared storage for Manager app / Migrator UI
         attempt("export detected UIDs and auth state to storage", silent = true) {
             val uids = BackupCrypto.resolveCandidateUids(ctx, cl, targets)
             BackupCrypto.syncDetectedUids(ctx, uids)

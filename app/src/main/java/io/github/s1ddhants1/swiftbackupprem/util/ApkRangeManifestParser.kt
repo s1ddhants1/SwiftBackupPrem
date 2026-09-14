@@ -34,7 +34,6 @@ object ApkRangeManifestParser {
         Log.d(TAG, "[ApkRangeManifestParser] Inspecting remote APK: ${apkItem.name}, size=$fileSize")
         if (fileSize < 200) return@attempt null
 
-        // 1. Fetch the last 64 KB of the file to find EOCD
         val tailSize = minOf(65536L, fileSize)
         val tailStart = fileSize - tailSize
         val tailBytes = scanner.downloadByteRange(context, prefs, apkItem, tailStart, fileSize - 1)
@@ -43,7 +42,6 @@ object ApkRangeManifestParser {
             return@attempt null
         }
 
-        // 2. Search for EOCD signature (0x06054b50)
         var eocdOffsetInTail = -1
         for (i in tailBytes.size - 22 downTo 0) {
             if (tailBytes[i] == 0x50.toByte() &&
@@ -68,7 +66,6 @@ object ApkRangeManifestParser {
         Log.d(TAG, "[ApkRangeManifestParser] Found EOCD in ${apkItem.name}: cdSize=$cdSize, cdOffset=$cdOffset")
         if (cdSize <= 0 || cdOffset < 0 || cdOffset + cdSize > fileSize) return@attempt null
 
-        // 3. Obtain Central Directory bytes
         val cdBytes = if (cdOffset >= tailStart && (cdOffset + cdSize) <= fileSize) {
             val startInTail = (cdOffset - tailStart).toInt()
             tailBytes.copyOfRange(startInTail, startInTail + cdSize.toInt())
@@ -80,7 +77,6 @@ object ApkRangeManifestParser {
                 }
         }
 
-        // 4. Find AndroidManifest.xml in Central Directory
         var pos = 0
         var manifestEntry: ManifestZipEntry? = null
         val cdBuf = ByteBuffer.wrap(cdBytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -117,7 +113,6 @@ object ApkRangeManifestParser {
         }
         Log.d(TAG, "[ApkRangeManifestParser] Found AndroidManifest.xml in ${apkItem.name}: lfhOffset=${entry.lfhOffset}, compSize=${entry.compressedSize}, method=${entry.method}")
 
-        // 5. Fetch Local File Header and compressed AndroidManifest.xml data
         val lfhFetchLen = minOf(fileSize - entry.lfhOffset, 30L + 2048L + entry.compressedSize)
         val lfhBytes = scanner.downloadByteRange(context, prefs, apkItem, entry.lfhOffset, entry.lfhOffset + lfhFetchLen - 1)
             ?: run {
@@ -141,7 +136,7 @@ object ApkRangeManifestParser {
             scanner.downloadByteRange(context, prefs, apkItem, exactStart, exactStart + entry.compressedSize - 1)
                 ?: return@attempt null
         }
-        val manifestBytes = if (entry.method == 8) { // DEFLATE
+        val manifestBytes = if (entry.method == 8) {
             val inflater = Inflater(true)
             inflater.setInput(rawData)
             val out = ByteArray(entry.uncompressedSize.toInt())
@@ -152,7 +147,6 @@ object ApkRangeManifestParser {
             rawData
         }
 
-        // 6. Parse Binary XML (AXML)
         parseAxml(manifestBytes)
     }
 
@@ -168,21 +162,20 @@ object ApkRangeManifestParser {
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
         val rootChunkType = buf.short.toInt() and 0xFFFF
-        buf.short // headerSize
-        buf.int // totalSize
-        if (rootChunkType != 0x0003) return@attempt null // RES_XML_TYPE
+        buf.short
+        buf.int
+        if (rootChunkType != 0x0003) return@attempt null
 
-        // String Pool Chunk
         val spChunkType = buf.short.toInt() and 0xFFFF
-        buf.short // spHeaderSize
+        buf.short
         val spSize = buf.int
-        if (spChunkType != 0x0001) return@attempt null // RES_STRING_POOL_TYPE
+        if (spChunkType != 0x0001) return@attempt null
 
         val strCount = buf.int
-        buf.int // styleCount
+        buf.int
         val flags = buf.int
         val strStart = buf.int
-        buf.int // stylesStart
+        buf.int
 
         val isUtf8 = (flags and (1 shl 8)) != 0
         val strOffsets = IntArray(strCount)
@@ -232,13 +225,13 @@ object ApkRangeManifestParser {
             val chunkSize = buf.int
             if (chunkSize <= 0) break
 
-            if (chunkType == 0x0102) { // START_TAG
-                buf.position(pos + 16) // headerSize is 16: lineNumber(4) and comment(4) are in bytes 8..15
-                buf.int // ns (bytes 16..19)
-                val nameIdx = buf.int // name (bytes 20..23)
-                val attrStart = buf.short.toInt() and 0xFFFF // attrStart (bytes 24..25)
-                val attrSize = buf.short.toInt() and 0xFFFF  // attrSize (bytes 26..27)
-                val attrCount = buf.short.toInt() and 0xFFFF // attrCount (bytes 28..29)
+            if (chunkType == 0x0102) {
+                buf.position(pos + 16)
+                buf.int
+                val nameIdx = buf.int
+                val attrStart = buf.short.toInt() and 0xFFFF
+                val attrSize = buf.short.toInt() and 0xFFFF
+                val attrCount = buf.short.toInt() and 0xFFFF
 
                 val tagName = if (nameIdx in strings.indices) strings[nameIdx] else ""
                 var attrPos = pos + headerSize + attrStart
@@ -246,11 +239,11 @@ object ApkRangeManifestParser {
                 for (a in 0 until attrCount) {
                     if (attrPos + 20 <= bytes.size) {
                         buf.position(attrPos)
-                        buf.int // a_ns
+                        buf.int
                         val aName = buf.int
                         val aValStr = buf.int
-                        buf.short // a_size
-                        buf.get() // res0
+                        buf.short
+                        buf.get()
                         val aValType = buf.get().toInt() and 0xFF
                         val aData = buf.int
 

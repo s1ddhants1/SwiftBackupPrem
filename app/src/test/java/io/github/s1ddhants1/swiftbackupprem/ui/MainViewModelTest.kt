@@ -35,6 +35,29 @@ class MainViewModelTest {
     }
 
     @Test
+    fun updateFrameworkEvaluationUpdatesAllFields() {
+        val viewModel = MainViewModel()
+        val evaluation = io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.BannerEvaluation(
+            isConnected = true,
+            isInjectable = true,
+            frameworkName = "LSPatch",
+            frameworkVersion = "0.6",
+            titleRes = io.github.s1ddhants1.swiftbackupprem.R.string.framework_active_title_dynamic,
+            titleArgs = listOf("LSPatch"),
+            descRes = io.github.s1ddhants1.swiftbackupprem.R.string.framework_active_desc,
+            descArgs = listOf("LSPatch", "0.6")
+        )
+        viewModel.updateFrameworkEvaluation(evaluation)
+        val state = viewModel.uiState.value
+        assertTrue(state.isFrameworkConnected)
+        assertTrue(state.isInjectable)
+        assertEquals("LSPatch", state.frameworkName)
+        assertEquals("0.6", state.frameworkVersion)
+        assertEquals(io.github.s1ddhants1.swiftbackupprem.R.string.framework_active_title_dynamic, state.titleRes)
+        assertEquals(listOf("LSPatch"), state.titleArgs)
+    }
+
+    @Test
     fun mainUiEventTypesHoldExpectedPayloads() {
         val exportSuccess = MainUiEvent.ConfigExported(success = true)
         assertTrue(exportSuccess.success)

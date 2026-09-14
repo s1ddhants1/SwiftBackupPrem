@@ -10,6 +10,7 @@ build
 local.properties
 release
 release.keystore
+keystore.properties
 *.keystore
 *.jks
 *.p12

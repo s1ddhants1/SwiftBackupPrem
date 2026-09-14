@@ -14,11 +14,6 @@ import io.github.s1ddhants1.swiftbackupprem.hook.hookTracked
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
 
-/**
- * Advanced & Experimental: Google Drive Full Scope Expander
- * Dynamically upgrades OAuth authorization scopes from app-restricted (drive.file)
- * to full Google Drive access (drive) across auth request builders, Uri parameters, and intents.
- */
 @Keep
 object GoogleDriveScopeHook : HookHandler {
 

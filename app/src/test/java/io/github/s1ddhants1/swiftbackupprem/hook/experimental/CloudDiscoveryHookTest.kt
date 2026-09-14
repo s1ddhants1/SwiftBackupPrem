@@ -347,7 +347,6 @@ class CloudDiscoveryHookTest {
         prefs.enableCloudDiscovery = false
         CloudDiscoveryHook.setPreferencesForTesting(prefs)
 
-        // isSnapshotInjectionEnabled recognizes unlockLocalCloudFeatures without requiring a full cloud network crawl
         assertTrue(CloudDiscoveryHook.isSnapshotInjectionEnabled())
         assertFalse(CloudDiscoveryHook.isCloudDiscoveryEnabled())
     }
@@ -359,7 +358,6 @@ class CloudDiscoveryHookTest {
         prefs.enableCloudDiscovery = true
         CloudDiscoveryHook.setPreferencesForTesting(prefs)
 
-        // When universal cloud discovery is enabled, web crawling can be triggered for cache recovery
         assertTrue(CloudDiscoveryHook.isSnapshotInjectionEnabled())
         assertTrue(CloudDiscoveryHook.isCloudDiscoveryEnabled())
     }

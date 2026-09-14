@@ -160,7 +160,6 @@ object OneDriveScanner : CloudScanner {
             }
         }
 
-        // Fallback: If folder crawling returned nothing, search for Swift Backup files across the whole drive
         if (items.isEmpty()) {
             val searchUrl = "https://graph.microsoft.com/v1.0/me/drive/root/search(q='Swift Backup')"
             val searchResp = executeGet(searchUrl, token)

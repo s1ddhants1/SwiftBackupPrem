@@ -43,9 +43,8 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidProjectId("my-app-123"))
         assertTrue(FirebaseConfigValidator.isValidProjectId("test-project"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidProjectId(""))
-        assertFalse(FirebaseConfigValidator.isValidProjectId("abc")) // too short
+        assertFalse(FirebaseConfigValidator.isValidProjectId("abc"))
         assertFalse(FirebaseConfigValidator.isValidProjectId("-invalid-start"))
         assertFalse(FirebaseConfigValidator.isValidProjectId("invalid-end-"))
         assertFalse(FirebaseConfigValidator.isValidProjectId("UPPERCASE_NOT_ALLOWED"))
@@ -58,9 +57,8 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidDatabaseUrl("https://proj-default-rtdb.europe-west1.firebasedatabase.app"))
         assertTrue(FirebaseConfigValidator.isValidDatabaseUrl("https://proj-default-rtdb.europe-west1.firebasedatabase.app/"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidDatabaseUrl(""))
-        assertFalse(FirebaseConfigValidator.isValidDatabaseUrl("http://my-app.firebaseio.com")) // must be https
+        assertFalse(FirebaseConfigValidator.isValidDatabaseUrl("http://my-app.firebaseio.com"))
         assertFalse(FirebaseConfigValidator.isValidDatabaseUrl("https://example.com"))
         assertFalse(FirebaseConfigValidator.isValidDatabaseUrl("abc"))
     }
@@ -70,10 +68,9 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidAppId("1:65312358122:android:ea39a9e3952e6522"))
         assertTrue(FirebaseConfigValidator.isValidAppId("1:123456789012:android:abcdef0123456789"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidAppId(""))
         assertFalse(FirebaseConfigValidator.isValidAppId("abc"))
-        assertFalse(FirebaseConfigValidator.isValidAppId("1:65312358122:ios:ea39a9e3952e6522")) // iOS not supported
+        assertFalse(FirebaseConfigValidator.isValidAppId("1:65312358122:ios:ea39a9e3952e6522"))
         assertFalse(FirebaseConfigValidator.isValidAppId("2:65312358122:android:ea39a9e3952e6522"))
     }
 
@@ -82,11 +79,10 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidApiKey("AIzaSyD_FakeApiKeyForTestingPurposes123"))
         assertTrue(FirebaseConfigValidator.isValidApiKey("AIzaSyD-1234567890abcdef1234567890abcde"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidApiKey(""))
         assertFalse(FirebaseConfigValidator.isValidApiKey("abc"))
-        assertFalse(FirebaseConfigValidator.isValidApiKey("AIza123")) // too short
-        assertFalse(FirebaseConfigValidator.isValidApiKey("BIzaSyD_FakeApiKeyForTestingPurposes123")) // does not start with AIza
+        assertFalse(FirebaseConfigValidator.isValidApiKey("AIza123"))
+        assertFalse(FirebaseConfigValidator.isValidApiKey("BIzaSyD_FakeApiKeyForTestingPurposes123"))
     }
 
     @Test
@@ -94,10 +90,9 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidSenderId("123456789012"))
         assertTrue(FirebaseConfigValidator.isValidSenderId("65312358122"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidSenderId(""))
         assertFalse(FirebaseConfigValidator.isValidSenderId("abc"))
-        assertFalse(FirebaseConfigValidator.isValidSenderId("123")) // too short (< 6 digits)
+        assertFalse(FirebaseConfigValidator.isValidSenderId("123"))
     }
 
     @Test
@@ -105,26 +100,22 @@ class FirebaseConfigValidatorTest {
         assertTrue(FirebaseConfigValidator.isValidClientId("123456789012-androidclient1234567890abcdef.apps.googleusercontent.com"))
         assertTrue(FirebaseConfigValidator.isValidClientId("123456789-abcdef.apps.googleusercontent.com"))
 
-        // Invalid cases
         assertFalse(FirebaseConfigValidator.isValidClientId(""))
         assertFalse(FirebaseConfigValidator.isValidClientId("abc"))
-        assertFalse(FirebaseConfigValidator.isValidClientId("123456789012.apps.googleusercontent.com")) // missing hash
+        assertFalse(FirebaseConfigValidator.isValidClientId("123456789012.apps.googleusercontent.com"))
         assertFalse(FirebaseConfigValidator.isValidClientId("123456789012-hash.google.com"))
     }
 
     @Test
     fun testStorageBucketValidation() {
-        // Blank is valid for optional bucket
         assertTrue(FirebaseConfigValidator.isValidStorageBucket(""))
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("   "))
 
-        // Valid bucket names
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("dummy-firebase-project.firebasestorage.app"))
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("my-app.appspot.com"))
         assertTrue(FirebaseConfigValidator.isValidStorageBucket("custom-bucket-name"))
 
-        // Invalid cases
-        assertFalse(FirebaseConfigValidator.isValidStorageBucket("ab")) // too short
+        assertFalse(FirebaseConfigValidator.isValidStorageBucket("ab"))
         assertFalse(FirebaseConfigValidator.isValidStorageBucket("-invalid-start"))
     }
 }

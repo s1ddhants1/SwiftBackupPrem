@@ -144,7 +144,6 @@ class ConfigRepositoryTest {
         assertEquals("1:999:android:old", result.googleAppId)
         assertEquals("old-project", result.projectId)
 
-        // Verifies new keys smoothly adopt default values without error
         assertFalse(result.enableGoogleDriveScope)
         assertFalse(result.enableCloudDiscovery)
         assertFalse(result.enableSnapshotInjection)

@@ -62,36 +62,55 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val isTv = rememberIsTvDevice()
 
-            // Edge-to-edge is not applicable on TV (no system bars)
             LaunchedEffect(isTv) { if (!isTv) enableEdgeToEdge() }
 
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val localPrefs = remember { getSharedPreferences(Consts.PREFS_SETTINGS, Context.MODE_PRIVATE) }
-            val prefsState = remember { mutableStateOf(PreferencesManager(localPrefs)) }
+            val prefsState = remember {
+                val mgr = PreferencesManager(localPrefs)
+                if (localPrefs.all.isEmpty()) {
+                    mgr.loadFromFallbackStorage(this@MainActivity)
+                }
+                mgr.onPreferenceChanged = { mgr.saveToFallbackStorageAsync(this@MainActivity) }
+                mutableStateOf(mgr)
+            }
             val prefs = prefsState.value
 
             LaunchedEffect(Unit) {
+                io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.requestServicePush(this@MainActivity)
                 App.serviceState.collect { service ->
+                    val evaluation = io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.evaluateFrameworkStatus(this@MainActivity, service)
+                    viewModel.updateFrameworkEvaluation(evaluation)
                     if (service != null) {
-                        val name = attempt("get frameworkName", silent = true) { service.frameworkName } ?: "LSPosed"
-                        val version = attempt("get frameworkVersion", silent = true) { service.frameworkVersion } ?: ""
-                        viewModel.onFrameworkConnected(name, version)
                         attempt("retrieve remote preferences from XposedService") {
                             val remotePrefs = service.getRemotePreferences(Consts.PREFS_SETTINGS)
                             val remoteMgr = PreferencesManager(remotePrefs, backupPrefs = localPrefs)
                             val localMgr = PreferencesManager(localPrefs)
                             if (remotePrefs.all.isEmpty()) {
+                                if (localPrefs.all.isEmpty()) {
+                                    localMgr.loadFromFallbackStorage(this@MainActivity)
+                                }
                                 remoteMgr.applyConfig(localMgr.toConfig())
                             } else {
                                 localMgr.applyConfig(remoteMgr.toConfig())
                             }
+                            remoteMgr.onPreferenceChanged = { remoteMgr.saveToFallbackStorageAsync(this@MainActivity) }
+                            remoteMgr.saveToFallbackStorageAsync(this@MainActivity)
                             prefsState.value = remoteMgr
                         }
                     } else {
-                        viewModel.onFrameworkDisconnected()
-                        prefsState.value = PreferencesManager(localPrefs)
+                        val fallbackMgr = PreferencesManager(localPrefs).apply {
+                            onPreferenceChanged = { saveToFallbackStorageAsync(this@MainActivity) }
+                        }
+                        prefsState.value = fallbackMgr
                     }
                 }
+            }
+
+            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                val evaluation = io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.evaluateFrameworkStatus(this@MainActivity, App.serviceState.value)
+                viewModel.updateFrameworkEvaluation(evaluation)
+                onPauseOrDispose {}
             }
 
             var currentScreen by remember { mutableStateOf(AppScreen.Settings) }
@@ -104,12 +123,18 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 viewModel.events.collect { event ->
                     val msg = when (event) {
-                        is MainUiEvent.ConfigExported ->
-                            if (event.success) getString(R.string.msg_config_exported)
-                            else getString(R.string.msg_export_failed, event.error ?: "unknown error")
-                        is MainUiEvent.ConfigImported ->
-                            if (event.success) getString(R.string.msg_config_imported)
-                            else getString(R.string.msg_import_failed, event.error ?: "unknown error")
+                        is MainUiEvent.ConfigExported -> {
+                            if (event.success) {
+                                prefs.saveToFallbackStorageAsync(this@MainActivity)
+                                getString(R.string.msg_config_exported)
+                            } else getString(R.string.msg_export_failed, event.error ?: "unknown error")
+                        }
+                        is MainUiEvent.ConfigImported -> {
+                            if (event.success) {
+                                prefs.saveToFallbackStorageAsync(this@MainActivity)
+                                getString(R.string.msg_config_imported)
+                            } else getString(R.string.msg_import_failed, event.error ?: "unknown error")
+                        }
                     }
                     snackbarHostState.showSnackbar(msg)
                 }
@@ -235,9 +260,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 AppScreen.Settings -> SettingsScreenContent(
                                     prefs = prefs,
-                                    isFrameworkConnected = state.isFrameworkConnected,
-                                    frameworkName = state.frameworkName,
-                                    frameworkVersion = state.frameworkVersion,
+                                    uiState = state,
                                     onOpenFirebaseSetup = { currentScreen = AppScreen.FirebaseSetup },
                                     onOpenMigrator = { currentScreen = AppScreen.BackupMigrator }
                                 )
@@ -253,9 +276,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SettingsScreenContent(
     prefs: PreferencesManager,
-    isFrameworkConnected: Boolean,
-    frameworkName: String,
-    frameworkVersion: String,
+    uiState: io.github.s1ddhants1.swiftbackupprem.ui.MainUiState,
     onOpenFirebaseSetup: () -> Unit,
     onOpenMigrator: () -> Unit
 ) {
@@ -265,11 +286,7 @@ private fun SettingsScreenContent(
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp)
     ) {
-        FrameworkStatusBanner(
-            isConnected = isFrameworkConnected,
-            frameworkName = frameworkName,
-            frameworkVersion = frameworkVersion
-        )
+        FrameworkStatusBanner(uiState = uiState)
 
         OutlinedCard(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -282,16 +299,13 @@ private fun SettingsScreenContent(
                 pref = prefs.enablePremium,
                 onPrefChange = { prefs.enablePremium = it }
             )
-
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
             SettingsSwitch(
                 label = stringResource(R.string.pref_disable_telemetry_title),
                 secondaryLabel = stringResource(R.string.pref_disable_telemetry_subtitle),
                 pref = prefs.disableTelemetry,
                 onPrefChange = { prefs.disableTelemetry = it }
             )
-
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             val firebaseConfigured = prefs.toConfig().isCompleteFirebaseConfig
@@ -331,6 +345,7 @@ private fun SettingsScreenContent(
 
         AdvancedSettingsCard(
             prefs = prefs,
+            isFrameworkConnected = uiState.isFrameworkConnected && uiState.isInjectable,
             onOpenMigrator = onOpenMigrator
         )
 
@@ -340,17 +355,16 @@ private fun SettingsScreenContent(
 
 @Composable
 private fun FrameworkStatusBanner(
-    isConnected: Boolean,
-    frameworkName: String,
-    frameworkVersion: String
+    uiState: io.github.s1ddhants1.swiftbackupprem.ui.MainUiState
 ) {
-    val statusBg = if (isConnected) {
+    val isBannerActive = uiState.isFrameworkConnected && uiState.isInjectable
+    val statusBg = if (isBannerActive) {
         MaterialTheme.colorScheme.surfaceVariant
     } else {
         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
     }
-    val badgeColor = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-    val iconTint = if (isConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError
+    val badgeColor = if (isBannerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val iconTint = if (isBannerActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError
 
     OutlinedCard(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -365,7 +379,7 @@ private fun FrameworkStatusBanner(
             Surface(shape = CircleShape, color = badgeColor, modifier = Modifier.size(38.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        imageVector = if (isBannerActive) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier.size(22.dp)
@@ -374,14 +388,21 @@ private fun FrameworkStatusBanner(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(if (isConnected) R.string.framework_active_title else R.string.framework_inactive_title),
+                    text = if (uiState.titleArgs.isEmpty()) {
+                        stringResource(uiState.titleRes)
+                    } else {
+                        stringResource(uiState.titleRes, *uiState.titleArgs.toTypedArray())
+                    },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (isConnected) stringResource(R.string.framework_active_desc, frameworkName, frameworkVersion)
-                    else stringResource(R.string.framework_inactive_desc),
+                    text = if (uiState.descArgs.isEmpty()) {
+                        stringResource(uiState.descRes)
+                    } else {
+                        stringResource(uiState.descRes, *uiState.descArgs.toTypedArray())
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

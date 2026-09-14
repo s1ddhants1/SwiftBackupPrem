@@ -84,7 +84,6 @@ fun CustomUidInputSection(
         }
     }
 
-    // Synchronize initial anonymous value if UID is empty and non-empty anonymous value is required
     LaunchedEffect(Unit) {
         if (uid.isBlank() && anonymousUidValue.isNotBlank()) {
             onUidChange(anonymousUidValue)

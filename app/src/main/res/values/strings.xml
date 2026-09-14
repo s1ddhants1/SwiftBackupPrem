@@ -3,7 +3,6 @@
     <string name="app_name">SwiftBackupPrem</string>
     <string name="app_description">Swift Backup Premium</string>
 
-    <!-- Top App Bar & Menu -->
     <string name="screen_settings">SwiftBackupPrem</string>
     <string name="screen_about">About</string>
     <string name="screen_firebase_setup">Firebase Setup</string>
@@ -13,7 +12,6 @@
     <string name="cd_back_to_settings">Back to settings</string>
     <string name="cd_menu_options">Menu options</string>
 
-    <!-- Action Buttons & Snackbars -->
     <string name="btn_force_stop">Force Stop</string>
     <string name="btn_open_app">Open App</string>
     <string name="btn_back">Back</string>
@@ -40,13 +38,20 @@
     <string name="msg_swift_backup_force_stopped">Swift Backup force-stopped</string>
     <string name="msg_opened_swift_backup_settings">Opened Swift Backup app settings</string>
 
-    <!-- Framework Status Card -->
-    <string name="framework_active_title">LSPosed Module Active</string>
-    <string name="framework_inactive_title">LSPosed Module Not Enabled</string>
+    <string name="framework_active_title">Module Active</string>
+    <string name="framework_active_title_dynamic">%1$s Module Active</string>
+    <string name="framework_inactive_title">Module Not Connected</string>
     <string name="framework_active_desc">Connected to %1$s %2$s</string>
-    <string name="framework_inactive_desc">Enable module in LSPosed manager</string>
+    <string name="framework_inactive_desc">Enable in LSPosed / LSPatch Manager or install integrated patch</string>
+    <string name="framework_sb_not_installed_title">Swift Backup Not Installed</string>
+    <string name="framework_sb_not_installed_desc">Install and patch Swift Backup with LSPatch</string>
+    <string name="framework_sb_not_patched_title">Swift Backup Not Patched</string>
+    <string name="framework_sb_not_patched_desc">Patch Swift Backup in LSPatch Manager to enable hooks</string>
+    <string name="framework_sb_not_in_scope_title">Module Disabled in LSPatch</string>
+    <string name="framework_sb_not_in_scope_desc">Enable SwiftBackupPrem for Swift Backup in LSPatch Manager</string>
+    <string name="framework_lspatch_embedded_active_title">LSPatch Embedded Module Active</string>
+    <string name="framework_lspatch_embedded_active_desc">Hooks integrated directly into Swift Backup</string>
 
-    <!-- Settings Switches -->
     <string name="pref_enable_premium_title">Premium Features</string>
     <string name="pref_enable_premium_subtitle">Enable Premium Features</string>
     <string name="pref_disable_telemetry_title">Disable Telemetry</string>
@@ -54,14 +59,12 @@
     <string name="pref_custom_firebase_title">Custom Firebase App</string>
     <string name="pref_custom_firebase_subtitle">Use personal Firebase database and credentials</string>
 
-    <!-- Experimental Section -->
     <string name="section_advanced_features">Experimental Features</string>
     <string name="section_advanced_features_subtitle">Preview features and advanced tweaks</string>
     <string name="pref_enable_drive_discovery_title">Universal Cloud Discovery</string>
     <string name="pref_enable_drive_discovery_subtitle">Scan and index backups across configured cloud providers</string>
     <string name="pref_enable_drive_discovery_requires_custom_firebase">Requires Custom Firebase App or Local Account Cloud Features</string>
 
-    <!-- Custom Firebase Configuration -->
     <string name="firebase_credentials_title">Credentials &amp; Review</string>
     <string name="firebase_tools_title">Setup Tools &amp; Consoles</string>
     <string name="firebase_consoles_label">Consoles &amp; APIs</string>
@@ -82,7 +85,6 @@
     <string name="wizard_status_ok">OK</string>
     <string name="wizard_status_missing">Missing</string>
 
-    <!-- Input Field Labels -->
     <string name="label_project_id">Project ID</string>
     <string name="label_firebase_db_url">Firebase Database URL</string>
     <string name="label_google_app_id">Google App ID</string>
@@ -92,7 +94,6 @@
     <string name="label_client_id">Client ID</string>
     <string name="label_firebase_rtdb">Firebase RTDB</string>
 
-    <!-- About Screen -->
     <string name="about_version_format">Version %1$s (%2$d)</string>
     <string name="about_authors_maintainers">Authors &amp; Maintainers</string>
     <string name="about_original_author_role">Original Author</string>
@@ -103,7 +104,6 @@
     <string name="about_lib_compose">AndroidX Jetpack Compose &amp; Material 3</string>
     <string name="about_lib_serialization">Kotlinx Serialization JSON</string>
 
-    <!-- Accessibility Content Descriptions -->
     <string name="cd_clear_input">Clear input</string>
     <string name="cd_app_icon">SwiftBackupPrem app icon</string>
     <string name="cd_author_avatar">Author avatar</string>
@@ -115,7 +115,6 @@
     <string name="cd_detect_uids">Detect UIDs</string>
     <string name="cd_pick_output_directory">Pick output directory</string>
 
-    <!-- Backup Migrator & Decryptor Tool -->
     <string name="migrator_permission_required_title">Storage Permission Required</string>
     <string name="migrator_permission_required_desc">All files access is required to scan and migrate backup folders on device storage</string>
     <string name="btn_grant_storage_permission">Grant All Files Access</string>
@@ -150,7 +149,6 @@
     <string name="migrator_result_output_format">Output: %1$s</string>
     <string name="migrator_logs_title">Execution Logs</string>
 
-    <!-- Backup Migration Hub -->
     <string name="screen_experimental_hub">Backup Migration</string>
     <string name="btn_open_migrator">Open Migrator</string>
     <string name="tab_local_migrator">Local Migration</string>

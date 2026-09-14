@@ -3,9 +3,6 @@ package io.github.s1ddhants1.swiftbackupprem.util
 import android.util.Log
 import io.github.s1ddhants1.swiftbackupprem.Consts
 
-/**
- * Executes [block] and returns its result, or returns `null` if an exception is thrown.
- */
 inline fun <T> attempt(operation: String, silent: Boolean = false, block: () -> T): T? = try {
     block()
 } catch (t: Throwable) {
@@ -13,15 +10,9 @@ inline fun <T> attempt(operation: String, silent: Boolean = false, block: () -> 
     null
 }
 
-/**
- * Executes [block] and returns its result, or returns [default] if an exception is thrown.
- */
 inline fun <T> attemptOrDefault(operation: String, default: T, silent: Boolean = false, block: () -> T): T =
     attempt(operation, silent, block) ?: default
 
-/**
- * Attempts to load a class by name, with flexible handling for obfuscated defpackage prefix.
- */
 fun loadClassFlexible(cl: ClassLoader, name: String): Class<*>? {
     val clean = name.removePrefix("defpackage.")
     return attempt("load $clean", silent = true) { cl.loadClass(clean) }

@@ -65,7 +65,6 @@ class BackupMigratorEngineTest {
         val backupId = "1724716800000"
         val appDir = File(sourceDir, "$pkg/$backupId").apply { mkdirs() }
 
-        // Create sample encrypted .xml
         val sourceKey = BackupCrypto.deriveConcealKey(sourceUid)
         val metaJson = JSONObject().apply {
             put("packageName", pkg)
@@ -77,7 +76,6 @@ class BackupMigratorEngineTest {
         val encMeta = BackupCrypto.concealEncrypt(metaJson.toString(), sourceKey)
         File(appDir, "$pkg.xml").writeText("v1:::$encUid:::$encMeta", StandardCharsets.UTF_8)
 
-        // Create slices
         File(appDir, "$pkg.app").writeText("APK_CONTENT")
         File(appDir, "$pkg.dat").writeText("DATA_CONTENT")
 
@@ -101,7 +99,6 @@ class BackupMigratorEngineTest {
         val destXml = File(destAppDir, "$pkg.xml")
         assertTrue("Destination .xml must exist", destXml.exists())
 
-        // Verify that destination .xml can be decrypted using anonymous key!
         val anonKey = BackupCrypto.deriveConcealKey(BackupMigratorEngine.SWIFT_BACKUP_ANONYMOUS_UID)
         val parts = destXml.readText(StandardCharsets.UTF_8).split(":::").filter { it.isNotBlank() }
         assertEquals(3, parts.size)
@@ -122,7 +119,6 @@ class BackupMigratorEngineTest {
         val backupId = "1724716900000"
         val appDir = File(sourceDir, "$pkg/$backupId").apply { mkdirs() }
 
-        // Slices without .xml (tests auto-reconstruction)
         File(appDir, "$pkg.app").writeText("APK_CONTENT")
         File(appDir, "$pkg.dat").writeText("DATA_CONTENT")
         File(appDir, "$pkg.extdat").writeText("EXT_DATA_CONTENT")
@@ -147,7 +143,6 @@ class BackupMigratorEngineTest {
         val destXml = File(destAppDir, "$pkg.xml")
         assertTrue(destXml.exists())
 
-        // Verify decryption with targetKey
         val targetKey = BackupCrypto.deriveConcealKey(targetUid)
         val parts = destXml.readText(StandardCharsets.UTF_8).split(":::").filter { it.isNotBlank() }
         val decMetaStr = String(BackupCrypto.concealDecrypt(parts[2], targetKey), StandardCharsets.UTF_8)
@@ -195,7 +190,6 @@ class BackupMigratorEngineTest {
         val sourceKey = BackupCrypto.deriveConcealKey(sourceUid)
         val plainDataPayload = "COMPRESSED_TAR_STREAM_PAYLOAD_UNENCRYPTED"
 
-        // Create Conceal encrypted .dat file
         val encBase64 = BackupCrypto.concealEncrypt(plainDataPayload, sourceKey)
         val encRawBytes = Base64Wrapper.decode(encBase64)
         File(appDir, "$pkg.app").writeText("APK_CONTENT")
@@ -216,12 +210,10 @@ class BackupMigratorEngineTest {
         val destAppDir = File(outputDir, "SwiftBackup/accounts/$anonHash/backups/apps/local/$pkg/$backupId")
         assertTrue(destAppDir.exists())
 
-        // Verify .dat was decrypted
         val destDat = File(destAppDir, "$pkg.dat")
         assertTrue(destDat.exists())
         assertEquals(plainDataPayload, destDat.readText(StandardCharsets.UTF_8))
 
-        // Verify .xml is unencrypted plaintext JSON and encryption flags are false
         val destXml = File(destAppDir, "$pkg.xml")
         assertTrue(destXml.exists())
         val xmlContent = destXml.readText(StandardCharsets.UTF_8)
@@ -238,14 +230,12 @@ class BackupMigratorEngineTest {
         val targetDirs = listOf(testDir)
         val uidFile = File(testDir, ".sbp_detected_uids")
 
-        // 1. Initial creation when file does not exist
         val initialUids = listOf("uid_alpha_12345678901234567890", "uid_beta_12345678901234567890")
         val result1 = BackupCrypto.syncDetectedUids(null, initialUids, targetDirs)
         assertTrue(uidFile.exists())
         assertEquals(listOf("uid_alpha_12345678901234567890", "uid_beta_12345678901234567890"), result1)
         assertEquals("uid_alpha_12345678901234567890\nuid_beta_12345678901234567890", uidFile.readText(StandardCharsets.UTF_8).trim())
 
-        // 2. Append new UID without duplicate
         val newUids = listOf("uid_beta_12345678901234567890", "uid_gamma_12345678901234567890")
         val result2 = BackupCrypto.syncDetectedUids(null, newUids, targetDirs)
         assertEquals(listOf("uid_alpha_12345678901234567890", "uid_beta_12345678901234567890", "uid_gamma_12345678901234567890"), result2)
@@ -254,7 +244,6 @@ class BackupMigratorEngineTest {
             uidFile.readText(StandardCharsets.UTF_8).trim()
         )
 
-        // 3. Recreate if deleted
         uidFile.delete()
         assertFalse(uidFile.exists())
         val result3 = BackupCrypto.syncDetectedUids(null, listOf("uid_delta_12345678901234567890"), targetDirs)

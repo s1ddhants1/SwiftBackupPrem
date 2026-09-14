@@ -112,7 +112,6 @@ class LocalCloudUnlockHookTest {
 
     @Test
     fun testShouldSkipIsAnonymousSpoofNormalCaller() {
-        // In this test runner, the stack trace does not contain intro or the dummy watcher class
         assertFalse(LocalCloudUnlockHook.shouldSkipIsAnonymousSpoof("com.dummy.WatcherClass"))
     }
 
@@ -243,7 +242,6 @@ class LocalCloudUnlockHookTest {
         val prefs = PreferencesManager(null)
         prefs.unlockLocalCloudFeatures = true
         prefs.customFirebaseApp = false
-        // When custom Firebase is not enabled, local cloud features always enforce
         assertTrue(LocalCloudUnlockHook.shouldEnforceLocalCloud(prefs, null))
     }
 
@@ -253,7 +251,6 @@ class LocalCloudUnlockHookTest {
         prefs.unlockLocalCloudFeatures = true
         prefs.customFirebaseApp = true
         LocalCloudUnlockHook.clearAuthCache()
-        // In test environment without FirebaseAuth or Google user signed in, local cloud enforces
         assertTrue(LocalCloudUnlockHook.shouldEnforceLocalCloud(prefs, null))
     }
 }

@@ -21,11 +21,15 @@ bool ends_with(const char *a, const char *b) {
     return strncmp(a + len - len2, b, len2) == 0;
 }
 
+static bool s_native_hooked = false;
+
 void on_library_loaded(const char *name, void *handle) {
-    if (name && hook_func && ends_with(name, "libnative-lib.so")) {
+    if (name && hook_func && !s_native_hooked &&
+        (ends_with(name, "libnative-lib.so") || strstr(name, "libnative-lib.so") != NULL)) {
         void *target = dlsym(handle, "JNI_OnLoad");
         if (target) {
             hook_func(target, (void *) fakeLoad, (void **) &backup);
+            s_native_hooked = true;
         }
     }
 }

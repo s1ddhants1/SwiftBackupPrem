@@ -581,6 +581,14 @@ object CloudDatabaseManager {
             .filter { it.isNotBlank() }
     }
 
+    private fun extractCloudProviderPrefix(key: String): String? {
+        val parenIdx = key.indexOf(" (")
+        if (parenIdx > 0 && key.endsWith(")")) {
+            return key.substring(0, parenIdx).trim().lowercase()
+        }
+        return null
+    }
+
     fun resolvePathInJson(root: JSONObject, segments: List<String>): Any? {
         if (segments.isEmpty()) return root
         var current: Any? = root
@@ -597,6 +605,15 @@ object CloudDatabaseManager {
             val matchedKey = keys.firstOrNull { it.equals(segment, ignoreCase = true) }
                 ?: keys.firstOrNull { it.replace(".", "").equals(segment.replace(".", ""), ignoreCase = true) }
                 ?: keys.firstOrNull { it.replace(" ", "").equals(segment.replace(" ", ""), ignoreCase = true) }
+                ?: run {
+                    val segPrefix = extractCloudProviderPrefix(segment)
+                    if (segPrefix != null) {
+                        keys.firstOrNull { extractCloudProviderPrefix(it) == segPrefix }
+                    } else null
+                }
+                ?: if (keys.size == 1 && i > 0 && segments[i - 1].equals("tags", ignoreCase = true)) {
+                    keys.first()
+                } else null
 
             if (matchedKey != null) {
                 current = current.get(matchedKey)
@@ -718,6 +735,12 @@ object CloudDatabaseManager {
                     keys.firstOrNull { it.equals(seg, ignoreCase = true) }
                         ?: keys.firstOrNull { it.replace(".", "").equals(seg.replace(".", ""), ignoreCase = true) }
                         ?: keys.firstOrNull { it.replace(" ", "").equals(seg.replace(" ", ""), ignoreCase = true) }
+                        ?: run {
+                            val segPrefix = extractCloudProviderPrefix(seg)
+                            if (segPrefix != null) {
+                                keys.firstOrNull { extractCloudProviderPrefix(it) == segPrefix }
+                            } else null
+                        }
                 }
 
                 val targetKey = existingKey ?: seg

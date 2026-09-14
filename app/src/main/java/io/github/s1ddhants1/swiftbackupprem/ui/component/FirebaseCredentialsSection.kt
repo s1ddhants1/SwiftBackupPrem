@@ -217,7 +217,6 @@ fun FirebaseCredentialsSection(
                     }
                 }
 
-                // Credentials input fields card
                 OutlinedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),

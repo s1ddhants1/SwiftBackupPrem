@@ -140,7 +140,6 @@ class PreferencesManagerTest {
         assertEquals("custom_local_user_123", prefs.localAccountCustomUid)
         assertEquals("custom_local_user_123", prefs.toConfig().localAccountCustomUid)
 
-        // When explicitly requested in config:
         val configWithDiscovery = config.copy(enableCloudDiscovery = true, enableSnapshotInjection = true)
         prefs.applyConfig(configWithDiscovery)
         assertTrue(prefs.enableCloudDiscovery)
@@ -156,13 +155,64 @@ class PreferencesManagerTest {
         prefs.unlockLocalCloudFeatures = true
         assertTrue(prefs.enableSnapshotInjection)
 
-        // Attempting to set to false while unlockLocalCloudFeatures is enabled still returns true
         prefs.enableSnapshotInjection = false
         assertTrue(prefs.enableSnapshotInjection)
 
-        // Toggling unlockLocalCloudFeatures off restores raw preference
         prefs.unlockLocalCloudFeatures = false
         assertFalse(prefs.enableSnapshotInjection)
+    }
+
+    @Test
+    fun fallbackStorageRoundtripLoadsConfigCorrectly() {
+        val tempDir = java.nio.file.Files.createTempDirectory("sbp_fallback_test").toFile()
+        try {
+            val fakeContext = FakeContext(tempDir)
+            val prefs = PreferencesManager(null)
+            prefs.enablePremium = true
+            prefs.unlockLocalCloudFeatures = true
+            prefs.localAccountCustomUid = "lspatch_uid_999"
+            prefs.googleAppId = "test-app-id"
+
+            val saved = prefs.saveToFallbackStorage(fakeContext)
+            assertTrue(saved)
+
+            val configFile = java.io.File(tempDir, "sbp_config.json")
+            assertTrue(configFile.exists())
+
+            val freshPrefs = PreferencesManager(null)
+            assertFalse(freshPrefs.unlockLocalCloudFeatures)
+            assertEquals("", freshPrefs.localAccountCustomUid)
+
+            val loaded = freshPrefs.loadFromFallbackStorage(fakeContext)
+            assertTrue(loaded)
+            assertTrue(freshPrefs.enablePremium)
+            assertTrue(freshPrefs.unlockLocalCloudFeatures)
+            assertEquals("lspatch_uid_999", freshPrefs.localAccountCustomUid)
+            assertEquals("test-app-id", freshPrefs.googleAppId)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preferenceChangesTriggerOnPreferenceChangedCallback() {
+        val fakePrefs = FakeSharedPreferences()
+        val prefs = PreferencesManager(fakePrefs)
+        var changeCount = 0
+        prefs.onPreferenceChanged = { changeCount++ }
+
+        prefs.enablePremium = true
+        assertEquals(1, changeCount)
+
+        prefs.googleAppId = "new-app-id"
+        assertEquals(2, changeCount)
+
+        prefs.unlockLocalCloudFeatures = true
+        assertEquals(3, changeCount)
+    }
+
+    private class FakeContext(private val externalDir: java.io.File?) : android.content.ContextWrapper(null) {
+        override fun getExternalFilesDir(type: String?): java.io.File? = externalDir
     }
 
     private class FakeSharedPreferences : android.content.SharedPreferences {

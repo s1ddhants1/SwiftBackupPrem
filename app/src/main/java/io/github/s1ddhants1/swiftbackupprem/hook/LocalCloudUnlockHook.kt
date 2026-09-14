@@ -390,6 +390,16 @@ object LocalCloudUnlockHook : HookHandler {
                         }
                     }
 
+                    val emptySnapshot = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(
+                        classLoader, ref, emptyMap<String, Any>()
+                    )
+                    if (emptySnapshot != null) {
+                        val emptySuccess = findSuccessResultInstance(returnType, emptySnapshot, classLoader, targets)
+                        if (emptySuccess != null) {
+                            Log.d(TAG, "[LocalCloudUnlock] Returned empty snapshot result for unresolved path: $path")
+                            return@intercept emptySuccess
+                        }
+                    }
                     chain.proceed()
                 }
             }
@@ -864,6 +874,32 @@ object LocalCloudUnlockHook : HookHandler {
                                 }
                                 Log.d(TAG, "[LocalCloudUnlock] Dispatching synthetic onDataChange to listener: ${listener.javaClass.name}, method: ${onDataChangeMethod?.name}")
                                 onDataChangeMethod?.invoke(listener, syntheticSnapshot)
+                            }
+                        }
+                        if (m.returnType == queryClass || m.returnType.isAssignableFrom(queryClass)) {
+                            return@intercept query
+                        }
+                        if (m.returnType.isInstance(listener)) {
+                            return@intercept listener
+                        }
+                        return@intercept null
+                    }
+
+                    val emptySnapshot = CloudDiscoveryHook.FirebaseSnapshotSynthesizer.createSnapshotFromMap(
+                        classLoader, query, emptyMap<String, Any>()
+                    )
+                    if (emptySnapshot != null) {
+                        mainHandler.post {
+                            attempt("dispatch empty onDataChange to listener") {
+                                val onDataChangeMethod = listener.javaClass.methods.firstOrNull { candidate ->
+                                    candidate.parameterCount == 1 && candidate.name != "equals" && (
+                                        candidate.name == "onDataChange" ||
+                                        candidate.parameterTypes[0].isAssignableFrom(emptySnapshot.javaClass) ||
+                                        emptySnapshot.javaClass.isAssignableFrom(candidate.parameterTypes[0])
+                                    )
+                                }
+                                Log.d(TAG, "[LocalCloudUnlock] Dispatching empty onDataChange for unresolved path: $path")
+                                onDataChangeMethod?.invoke(listener, emptySnapshot)
                             }
                         }
                         if (m.returnType == queryClass || m.returnType.isAssignableFrom(queryClass)) {

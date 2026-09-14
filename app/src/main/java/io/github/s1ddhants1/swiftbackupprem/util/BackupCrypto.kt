@@ -15,10 +15,6 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Shared cryptography and metadata decoding engine for Facebook Conceal (AES-GCM-256),
- * Zstandard decompression, and UID resolution across Cloud Discovery and Backup Rebuilder.
- */
 object BackupCrypto {
 
     private const val CONCEAL_ENTITY = "SwiftBackup_Entity"
@@ -177,7 +173,6 @@ object BackupCrypto {
             uids.add(prefs.localAccountCustomUid.trim())
         }
 
-        // 1. Resolved user classes from targets
         targets?.authUserClass?.let { cls ->
             attempt("resolve UID via authUserClass", silent = true) {
                 val user = cls.declaredMethods.firstOrNull { it.parameterCount == 0 && java.lang.reflect.Modifier.isStatic(it.modifiers) }?.invoke(null)
@@ -193,7 +188,6 @@ object BackupCrypto {
             }
         }
 
-        // 2. FirebaseAuth.getInstance().getCurrentUser().getUid()
         attempt("resolve UID via FirebaseAuth", silent = true) {
             val fbAuthClass = classLoader.loadClass("com.google.firebase.auth.FirebaseAuth")
             val authInstance = fbAuthClass.getDeclaredMethod("getInstance").invoke(null)
@@ -212,25 +206,21 @@ object BackupCrypto {
 
         fun extractUidsFromText(text: String) {
             if (text.isBlank()) return
-            // A. Firebase Auth GET_TOKEN_RESPONSE keys: com.google.firebase.auth.GET_TOKEN_RESPONSE.<UID>
             val matcherAuth = Pattern.compile("com\\.google\\.firebase\\.auth\\.GET_TOKEN_RESPONSE\\.([a-zA-Z0-9]{20,36})").matcher(text)
             while (matcherAuth.find()) {
                 val uid = matcherAuth.group(1)
                 if (!uid.isNullOrBlank()) uids.add(uid)
             }
-            // B. JSON UID fields: "uid": "..."
             val matcherJsonUid = Pattern.compile("[\"\\\\]+uid[\"\\\\]+[:=]+[\"\\\\]+([a-zA-Z0-9]{20,36})[\"\\\\]+").matcher(text)
             while (matcherJsonUid.find()) {
                 val uid = matcherJsonUid.group(1)
                 if (!uid.isNullOrBlank()) uids.add(uid)
             }
-            // C. JSON localId fields
             val matcherLocalId = Pattern.compile("[\"\\\\]+localId[\"\\\\]+[:=]+[\"\\\\]+([a-zA-Z0-9]{20,36})[\"\\\\]+").matcher(text)
             while (matcherLocalId.find()) {
                 val uid = matcherLocalId.group(1)
                 if (!uid.isNullOrBlank()) uids.add(uid)
             }
-            // D. Tokens matching known account hashes on disk
             val matcherCandidates = Pattern.compile("(?<=[^a-zA-Z0-9]|^)([a-zA-Z0-9]{28})(?=[^a-zA-Z0-9]|$)").matcher(text)
             while (matcherCandidates.find()) {
                 val candidate = matcherCandidates.group(1)
@@ -240,7 +230,6 @@ object BackupCrypto {
             }
         }
 
-        // 3. Direct SharedPreferences file access (if readable)
         attempt("resolve UIDs from shared_prefs Store XMLs and app preferences", silent = true) {
             val candidateDirs = mutableListOf<File>()
             if (context != null) {
@@ -259,7 +248,6 @@ object BackupCrypto {
             }
         }
 
-        // 4. Shared storage sync files written by LSPosed hook or backup migrator
         attempt("resolve UIDs from shared storage sync files", silent = true) {
             val syncFiles = listOf(
                 File("/storage/emulated/0/SwiftBackup/.sbp_detected_uids"),
@@ -274,7 +262,6 @@ object BackupCrypto {
             }
         }
 
-        // 5. Root Shell execution with multiple su binary fallbacks & timeout
         attempt("resolve UIDs via root shell from Swift Backup", silent = true) {
             val suBins = listOf("su", "/system/bin/su", "/data/adb/ksu/bin/su", "/data/adb/ap/bin/su", "/data/adb/magisk/su")
             for (suBin in suBins) {

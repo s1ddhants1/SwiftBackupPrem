@@ -7,17 +7,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
-/**
- * High-performance engine to decrypt, parse, reconstruct missing metadata for,
- * and re-encrypt Swift Backup folder archives for local restore.
- */
 object BackupMigratorEngine {
 
-    /**
-     * Official static anonymous UID derived from official Swift Backup APK signature:
-     * MurmurHash3_128(signature.hashCode()).reversed() = "d58b0944415a4889d7f11aa95fbeca50"
-     * Folder hash: MD5(UID)[0..15] = "8690a48a4fcc72f1"
-     */
     const val SWIFT_BACKUP_ANONYMOUS_UID = "d58b0944415a4889d7f11aa95fbeca50"
 
     sealed class TargetEncryptionMode {
@@ -71,18 +62,12 @@ object BackupMigratorEngine {
         val errors: List<String>
     )
 
-    /**
-     * Compute the 16-character lowercase MD5 account folder name used by Swift Backup.
-     */
     fun computeAccountHash(uid: String): String {
         val digest = MessageDigest.getInstance("MD5")
         val hashBytes = digest.digest(uid.toByteArray(StandardCharsets.UTF_8))
         return hashBytes.joinToString("") { "%02x".format(it) }.take(16)
     }
 
-    /**
-     * Execute full backup migration from source directory to target directory.
-     */
     fun migrate(config: MigrationConfig, context: Context? = null): MigrationResult {
         val logs = mutableListOf<String>()
         val errors = mutableListOf<String>()
@@ -137,7 +122,6 @@ object BackupMigratorEngine {
         var totalFolders = 0
         var totalSynced = 0
 
-        // Find candidate app backup folders (any directory containing backup slices or named with timestamp/id)
         val appBackupDirs = findAppBackupDirs(config.sourceDir)
         val folderBackupDirs = findFolderBackupDirs(config.sourceDir)
         val totalWork = appBackupDirs.size + folderBackupDirs.size
@@ -152,7 +136,6 @@ object BackupMigratorEngine {
         } else null
         val idToken = authCreds?.idToken
 
-        // 1. Process App Backups
         for ((pkgName, backupDir) in appBackupDirs) {
             val backupId = backupDir.name
             val destBackupDir = if (isPortable) File(appsTargetBase, pkgName) else File(appsTargetBase, "$pkgName/$backupId")
@@ -191,7 +174,6 @@ object BackupMigratorEngine {
             completedWork++
         }
 
-        // 2. Process Folder Backups
         for (folderDir in folderBackupDirs) {
             val folderName = folderDir.name
             val destFolderDir = File(foldersTargetBase, folderName)
@@ -242,9 +224,6 @@ object BackupMigratorEngine {
         )
     }
 
-    /**
-     * Locate app backup directories within arbitrary source folder structure.
-     */
     fun findAppBackupDirs(sourceDir: File): List<Pair<String, File>> {
         val results = mutableListOf<Pair<String, File>>()
 
@@ -281,9 +260,6 @@ object BackupMigratorEngine {
         return results.distinctBy { it.second.absolutePath }
     }
 
-    /**
-     * Locate folder backup directories (named Folder-* or containing folder-base.*).
-     */
     fun findFolderBackupDirs(sourceDir: File): List<File> {
         val results = mutableListOf<File>()
 
@@ -327,7 +303,6 @@ object BackupMigratorEngine {
             var notificationPolicyXml: String? = null
             var existingMetaJson: JSONObject? = null
 
-            // 1. Inspect APK if present
             val apkFile = files.firstOrNull { it.name.endsWith(".app") || it.name.endsWith(".apk") }
             if (apkFile != null && context != null) {
                 attempt("read apk metadata", silent = true) {
@@ -347,7 +322,6 @@ object BackupMigratorEngine {
 
             val classLoader = BackupMigratorEngine::class.java.classLoader ?: ClassLoader.getSystemClassLoader()
 
-            // 2. Decrypt & parse .extra if present
             val extraFile = files.firstOrNull { it.name.endsWith(".extra") }
             if (extraFile != null && extraFile.length() > 0) {
                 attempt("decrypt .extra payload", silent = true) {
@@ -365,7 +339,6 @@ object BackupMigratorEngine {
                             if (j.has("versionName")) versionName = j.optString("versionName", versionName)
                         }
 
-                        // Write re-encrypted or decrypted .extra to destination
                         val destExtra = if (isPortable) File(destBackupDir, "${pkgName}_extras.json") else File(destBackupDir, "$pkgName.extra")
                         if (targetUid != null && targetKey != null) {
                             val encUid = BackupCrypto.concealEncrypt(targetUid, targetKey)
@@ -380,7 +353,6 @@ object BackupMigratorEngine {
                 }
             }
 
-            // 3. Decrypt & parse .xml metadata if present
             val xmlFile = files.firstOrNull { it.name.endsWith(".xml") }
             if (xmlFile != null && xmlFile.length() > 0) {
                 attempt("decrypt .xml metadata", silent = true) {
@@ -399,7 +371,6 @@ object BackupMigratorEngine {
                 }
             }
 
-            // 4. Copy & decrypt data slices (.app, .apk, .splits, .dat, .extdat, .med)
             files.forEach { file ->
                 if (!file.name.endsWith(".xml") && !file.name.endsWith(".extra")) {
                     val destFileName = if (isPortable) resolvePortableFileName(pkgName, file.name) else file.name
@@ -420,7 +391,6 @@ object BackupMigratorEngine {
                 }
             }
 
-            // 5. Build full reconstructed / updated metadata JSON
             val now = System.currentTimeMillis()
             val metaJson = (existingMetaJson ?: JSONObject()).apply {
                 put("packageName", pkgName)
@@ -472,7 +442,6 @@ object BackupMigratorEngine {
                 notificationPolicyXml?.let { put("notificationPolicyXml", it) }
             }
 
-            // 6. Write destination metadata file
             val destXml = if (isPortable) File(destBackupDir, "${pkgName}_metadata.json") else File(destBackupDir, "$pkgName.xml")
             if (targetUid != null && targetKey != null) {
                 val encUid = BackupCrypto.concealEncrypt(targetUid, targetKey)
@@ -533,7 +502,6 @@ object BackupMigratorEngine {
             var created = System.currentTimeMillis()
             val classLoader = BackupMigratorEngine::class.java.classLoader ?: ClassLoader.getSystemClassLoader()
 
-            // 1. Decrypt folder manifest if present
             val flmFile = files.firstOrNull { it.name.endsWith(".flm") }
             if (flmFile != null && flmFile.length() > 0) {
                 attempt("decrypt .flm manifest", silent = true) {
@@ -549,7 +517,6 @@ object BackupMigratorEngine {
                             created = j.optLong("created", created)
                         }
 
-                        // Re-encrypt or write decrypted .flm
                         val destFlm = if (isPortable) File(destFolderDir, "${folderName}_manifest.json") else File(destFolderDir, "folder-base.flm")
                         if (targetUid != null && targetKey != null) {
                             val encUid = BackupCrypto.concealEncrypt(targetUid, targetKey)
@@ -564,7 +531,6 @@ object BackupMigratorEngine {
                 }
             }
 
-            // 2. Copy folder archive (.fld) and other assets
             files.forEach { file ->
                 if (!file.name.endsWith(".flm") && file.name != "metadata.json") {
                     val destFileName = if (isPortable && file.name == "folder-base.fld") "$folderName.tar" else file.name
@@ -585,7 +551,6 @@ object BackupMigratorEngine {
                 }
             }
 
-            // 3. Write standard metadata.json
             val destFld = File(destFolderDir, "folder-base.fld")
             val destFlm = File(destFolderDir, "folder-base.flm")
             val fldSize = if (destFld.exists()) destFld.length() else 0L
@@ -653,9 +618,6 @@ object BackupMigratorEngine {
     }
 }
 
-/**
- * Utility wrapper for Base64 encoding across JVM and Android unit tests.
- */
 object Base64Wrapper {
     fun encodeToString(bytes: ByteArray): String = java.util.Base64.getEncoder().encodeToString(bytes)
     fun decode(base64: String): ByteArray = java.util.Base64.getDecoder().decode(base64.trim().replace("\n", "").replace("\r", ""))

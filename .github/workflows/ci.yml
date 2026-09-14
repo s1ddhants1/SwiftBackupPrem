@@ -134,7 +134,7 @@ jobs:
       - name: Upload Release APK & ProGuard Mapping
         uses: actions/upload-artifact@v7
         with:
-          name: SwiftBackupPrem-testing-release
+          name: SwiftBackupPrem-${{ github.ref_name }}-release
           retention-days: 14
           path: |
             app/build/outputs/apk/release/*.apk
@@ -144,7 +144,7 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: SwiftBackupPrem-testing-debug
+          name: SwiftBackupPrem-${{ github.ref_name }}-debug
           retention-days: 14
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

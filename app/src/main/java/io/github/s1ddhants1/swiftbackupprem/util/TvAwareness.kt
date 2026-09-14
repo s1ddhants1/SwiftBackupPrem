@@ -18,10 +18,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-/**
- * Detects whether the current device is an Android TV (leanback) environment.
- * Caches the result per-composition to avoid repeated PackageManager queries.
- */
 @Composable
 fun rememberIsTvDevice(): Boolean {
     val context = LocalContext.current
@@ -33,10 +29,6 @@ fun rememberIsTvDevice(): Boolean {
     }
 }
 
-/**
- * Makes a composable D-pad focusable with a visible focus ring on Android TV.
- * On non-TV devices this is a no-op passthrough to avoid visual clutter.
- */
 fun Modifier.tvFocusable(
     interactionSource: MutableInteractionSource? = null,
 ): Modifier = composed {

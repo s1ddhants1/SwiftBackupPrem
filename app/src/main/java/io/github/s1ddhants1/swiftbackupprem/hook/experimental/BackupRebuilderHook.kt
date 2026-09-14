@@ -16,10 +16,6 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-/**
- * Hook and engine that automatically detects, decrypts, and reconstructs missing
- * `<packageName>.xml` metadata files for cloud-downloaded and orphaned backups.
- */
 @Keep
 object BackupRebuilderHook : HookHandler {
 
@@ -28,7 +24,6 @@ object BackupRebuilderHook : HookHandler {
     private fun logI(msg: String) { try { Log.i(TAG, "[BackupRebuilder] $msg") } catch (_: Throwable) {} }
 
     fun shutdown() {
-        // Lifecycle reset on hot reload
     }
 
     private data class BackupSlice(
@@ -46,9 +41,6 @@ object BackupRebuilderHook : HookHandler {
         targets: ResolvedTargets,
         prefs: PreferencesManager
     ) {
-        // No-op: Local backups do not perform background metadata reconstruction via Xposed hooks.
-        // Cloud backup metadata reconstruction is bound to Universal Cloud Discovery,
-        // and local migration reconstructs metadata by default within BackupMigratorEngine.
     }
 
     fun resolveAppLabel(context: Context?, pkgName: String, backupDir: File? = null): String {
