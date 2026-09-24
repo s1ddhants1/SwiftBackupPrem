@@ -120,8 +120,8 @@ jobs:
       - name: Create Pull Request with New Class Mappings
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: 'feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}'
-          title: 'feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}'
+          commit-message: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
+          title: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
           body: |
             ### Automated Target Class Scanner Update
             
@@ -136,7 +136,7 @@ jobs:
             - Injected new `VersionClasses` mapping in `DexKit.kt`.
             - Added regression test assertions in `DexKitVersionMapTest.kt`.
             - Ran `./gradlew testDebugUnitTest` — all unit tests passed cleanly.
-          branch: auto-update/swiftbackup-${{ needs.check-release.outputs.version_code || 'release' }}
+          branch: "auto-update/swiftbackup-${{ needs.check-release.outputs.version_code || 'release' }}"
           delete-branch: true
           labels: |
             automated-pr
