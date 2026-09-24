@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           sparse-checkout: |
             tools/
@@ -42,7 +42,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -60,12 +60,12 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -118,7 +118,7 @@ jobs:
           fi
 
       - name: Create Pull Request with New Class Mappings
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
           title: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
