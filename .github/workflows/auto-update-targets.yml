@@ -120,6 +120,8 @@ jobs:
       - name: Create Pull Request with New Class Mappings
         uses: peter-evans/create-pull-request@v8
         with:
+          base: ${{ github.ref_name }}
+          branch: "auto-update/${{ github.ref_name }}/swiftbackup-${{ needs.check-release.outputs.version_code || 'release' }}"
           commit-message: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
           title: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
           body: |
@@ -127,16 +129,16 @@ jobs:
             
             This pull request was automatically triggered because a new unmapped release was detected on the [Swift Backup Updates Telegram Channel](https://t.me/swiftbackupupdates):
             
+            - **Target Branch**: `${{ github.ref_name }}`
             - **Release**: `${{ needs.check-release.outputs.doc_title }}`
             - **Version Code**: `${{ needs.check-release.outputs.version_code }}`
             - **Telegram URL**: ${{ needs.check-release.outputs.url }}
             
             #### Automated Verification:
-            - Scanned multi-DEX classes with [tools/scan_swiftbackup.py](https://github.com/${{ github.repository }}/blob/main/tools/scan_swiftbackup.py).
+            - Scanned multi-DEX classes with [tools/scan_swiftbackup.py](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/tools/scan_swiftbackup.py).
             - Injected new `VersionClasses` mapping in `DexKit.kt`.
             - Added regression test assertions in `DexKitVersionMapTest.kt`.
             - Ran `./gradlew testDebugUnitTest` — all unit tests passed cleanly.
-          branch: "auto-update/swiftbackup-${{ needs.check-release.outputs.version_code || 'release' }}"
           delete-branch: true
           labels: |
             automated-pr

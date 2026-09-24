@@ -2,12 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - testing
-      - legacy
-      - lspatch
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -18,12 +12,6 @@ on:
       - 'SUMMARY'
       - 'SOURCE_URL'
   pull_request:
-    branches:
-      - main
-      - master
-      - testing
-      - legacy
-      - lspatch
     paths-ignore:
       - '**.md'
       - 'docs/**'
