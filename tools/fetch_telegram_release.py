@@ -103,15 +103,22 @@ def download_via_telethon(msg_id: int, output_path: str) -> bool:
 
     try:
         from telethon.sync import TelegramClient
-        client = TelegramClient(session, int(api_id), api_hash)
+        from telethon.sessions import StringSession
+        
+        session_obj = StringSession(session) if session and len(session) > 50 else session
+        client = TelegramClient(session_obj, int(api_id), api_hash)
         if bot_token:
             client.start(bot_token=bot_token)
         else:
-            client.start()
+            client.connect()
+            if not client.is_user_authorized():
+                print("[!] Telethon session is not authorized.")
+                return False
         with client:
             message = client.get_messages(TELEGRAM_CHANNEL, ids=msg_id)
             if message and message.media:
-                print(f"[*] Downloading message {msg_id} media via Telethon...")
+                file_name = message.file.name if message.file else f"msg_{msg_id}.apk"
+                print(f"[*] Downloading message {msg_id} media via Telethon ({file_name})...")
                 client.download_media(message, file=output_path)
                 return os.path.exists(output_path)
     except Exception as e:
