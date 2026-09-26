@@ -19,6 +19,7 @@ from scan_swiftbackup import (
     format_kotlin_entry,
     update_dexkit_kt,
     update_tests,
+    update_reverse_engineering_doc,
 )
 
 TELEGRAM_CHANNEL = "swiftbackupupdates"
@@ -102,7 +103,6 @@ def download_via_telethon(msg_id: int, output_path: str) -> bool:
 
     try:
         from telethon.sync import TelegramClient
-        client_kwargs = {}
         client = TelegramClient(session, int(api_id), api_hash)
         if bot_token:
             client.start(bot_token=bot_token)
@@ -118,40 +118,12 @@ def download_via_telethon(msg_id: int, output_path: str) -> bool:
         print(f"[!] Telethon download failed: {e}")
     return False
 
-def update_reverse_engineering_doc(doc_file: str, version_code: int, classes: dict):
-    """Appends a new version column/row to docs/REVERSE_ENGINEERING.md target table."""
-    if not os.path.exists(doc_file):
-        return
-    with open(doc_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Look for known classes in table
-    marker = f"(v{version_code})"
-    if marker in content:
-        return
-
-    # Replace header row to add new version column
-    table_header_pat = r"(\| Logical Target \| Purpose & Responsibility \| Known Classes \(v561-v590\) \| Known Classes \(v620\) \| Known Classes \(v623\) \| Known Classes \(v626\) )(\| Semantic Invariant Tokens & Footprint \|)"
-    if re.search(table_header_pat, content):
-        content = re.sub(
-            table_header_pat,
-            r"\1| Known Classes (v" + str(version_code) + r") \2",
-            content
-        )
-        content = re.sub(
-            r"(\| :--- \| :--- \| :--- \| :--- \| :--- \| :--- )(\| :--- \|)",
-            r"\1| :--- \2",
-            content
-        )
-        with open(doc_file, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"[+] Updated table headers in {doc_file}")
-
 def main():
     parser = argparse.ArgumentParser(description="Fetch and scan new releases from Telegram.")
     parser.add_argument("--apk", help="Explicit path to APK file (bypasses Telegram download)")
     parser.add_argument("--check-only", action="store_true", help="Only check for new releases without updating code")
     parser.add_argument("--update-code", action="store_true", default=True, help="Automatically update DexKit.kt, tests, and docs")
+    parser.add_argument("--all-unmapped", action="store_true", help="Include historical unmapped releases below current max version")
     args = parser.parse_args()
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -160,7 +132,8 @@ def main():
     doc_file = os.path.join(repo_root, "docs/REVERSE_ENGINEERING.md")
 
     mapped_codes = get_mapped_versions(dexkit_kt)
-    print(f"[*] Currently mapped versionCodes in DexKit.kt: {sorted(list(mapped_codes))}")
+    max_mapped = max(mapped_codes) if mapped_codes else 0
+    print(f"[*] Currently mapped versionCodes in DexKit.kt: {sorted(list(mapped_codes))} (latest: {max_mapped})")
 
     print(f"[*] Querying Telegram channel @{TELEGRAM_CHANNEL}...")
     releases = get_latest_channel_releases()
@@ -173,9 +146,13 @@ def main():
     latest = releases[0]
     print(f"[*] Latest channel release: {latest['doc_title']} (versionCode: {latest['version_code']}, URL: {latest['url']})")
 
-    new_releases = [r for r in releases if r["version_code"] not in mapped_codes]
+    if args.all_unmapped:
+        new_releases = [r for r in releases if r["version_code"] not in mapped_codes]
+    else:
+        new_releases = [r for r in releases if r["version_code"] and r["version_code"] > max_mapped]
+
     if not new_releases:
-        print("[+] All Telegram channel releases are already mapped in DexKit.kt! Codebase is up-to-date.")
+        print("[+] All relevant Telegram channel releases are already mapped in DexKit.kt! Codebase is up-to-date.")
         if "GITHUB_OUTPUT" in os.environ:
             with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                 f.write("new_version_found=false\n")
@@ -194,6 +171,7 @@ def main():
     if args.check_only:
         sys.exit(0)
 
+    updated_count = 0
     # Process each unmapped release (starting from lowest unmapped to latest)
     for rel in reversed(new_releases):
         vcode = rel["version_code"]
@@ -214,8 +192,13 @@ def main():
 
         if not apk_path or not os.path.exists(apk_path):
             print(f"[!] APK for versionCode {vcode} could not be downloaded automatically.")
-            print(f"[!] Please download it from: {rel['url']}")
-            print(f"[!] And run:")
+            if not os.environ.get("TG_API_ID") or not os.environ.get("TG_API_HASH"):
+                print("[!] Reason: TG_API_ID and TG_API_HASH secrets are not configured.")
+            elif not os.environ.get("TG_SESSION") and not os.environ.get("TG_BOT_TOKEN"):
+                print("[!] Reason: TG_SESSION secret is not configured.")
+            print(f"[!] Telegram release URL: {rel['url']}")
+            print(f"[!] To resolve: add TG_API_ID, TG_API_HASH, and TG_SESSION to repository secrets,")
+            print(f"    or trigger workflow_dispatch with 'apk_url', or scan locally with:")
             print(f"    python3 tools/scan_swiftbackup.py --apk <path_to_apk> --update-code")
             continue
 
@@ -231,6 +214,11 @@ def main():
             update_tests(test_kt, vcode, classes)
             update_reverse_engineering_doc(doc_file, vcode, classes)
             print(f"[+] Successfully updated codebase for Swift Backup {vname} ({vcode})!")
+            updated_count += 1
+
+    if updated_count == 0 and new_releases:
+        print(f"\n[!] Failed to download and update any of the {len(new_releases)} unmapped release(s).")
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()

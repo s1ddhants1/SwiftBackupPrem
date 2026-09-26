@@ -417,10 +417,61 @@ def update_tests(test_file: str, version_code: int, classes: dict) -> bool:
     print(f"[+] Updated unit tests in {test_file}")
     return True
 
+def update_reverse_engineering_doc(doc_file: str, version_code: int, classes: dict):
+    """Appends a new version column to docs/REVERSE_ENGINEERING.md target table."""
+    if not os.path.exists(doc_file):
+        return
+    with open(doc_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    marker = f"(v{version_code})"
+    if marker in content:
+        return
+
+    # Replace header row to add new version column
+    table_header_pat = r"(\| Logical Target \| Purpose & Responsibility (?:\| Known Classes \([^\)]+\) )+)(\| Semantic Invariant Tokens & Footprint \|)"
+    m = re.search(table_header_pat, content)
+    if m:
+        content = content[:m.start()] + m.group(1) + f"| Known Classes (v{version_code}) " + m.group(2) + content[m.end():]
+        sep_pat = r"(\| :--- \| :--- (?:\| :--- )+)(\| :--- \|)"
+        m_sep = re.search(sep_pat, content)
+        if m_sep:
+            content = content[:m_sep.start()] + m_sep.group(1) + "| :--- " + m_sep.group(2) + content[m_sep.end():]
+
+        row_map = {
+            "vClass": "common.V",
+            "SwiftApp": "org.swiftapps.swiftbackup.SwiftApp",
+            "homeViewModelClass": classes.get("homeViewModel", "-"),
+            "clientIdClass": classes.get("clientId", "-"),
+            "oauthHelperClass": classes.get("oauthHelper", "-"),
+            "authRequestBuilderClass": classes.get("authRequestBuilder", "-"),
+            "authUserClass": classes.get("authUser", "-"),
+            "anonUserClass": classes.get("anonUser", "-"),
+            "firebaseWatcherClass": classes.get("firebaseWatcher", "-"),
+            "fireSynchronizerClass": classes.get("fireSynchronizer", "-"),
+            "fireSynchronizerSuccessClass": classes.get("fireSynchronizerSuccess", "-"),
+            "fireSynchronizerWriteSuccessClass": classes.get("fireSynchronizerWriteSuccess", classes.get("fireSynchronizerSuccess", "-")),
+            "customClassMapperClass": classes.get("customClassMapper", "-"),
+            "settingsFragmentClass": classes.get("settingsFragment", "-"),
+            "baseSettingsFragmentClass": classes.get("baseSettingsFragment", "-"),
+            "libnative-lib.so": "Native library",
+        }
+
+        for target_key, class_val in row_map.items():
+            row_pat = re.compile(r"(\| \*\*`" + re.escape(target_key) + r"`\*\* \| [^\|]+ (?:\| [^\|]+ )+)(\| [^\|]+ \|)")
+            m_row = row_pat.search(content)
+            if m_row:
+                replacement_cell = f"`{class_val}`" if not class_val.startswith("Native") and class_val != "-" else class_val
+                content = content[:m_row.start()] + m_row.group(1) + f"| {replacement_cell} " + m_row.group(2) + content[m_row.end():]
+
+        with open(doc_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"[+] Updated target table in {doc_file}")
+
 def main():
     parser = argparse.ArgumentParser(description="Scan Swift Backup APK for invariant targets.")
     parser.add_argument("--apk", required=True, help="Path to Swift Backup APK")
-    parser.add_argument("--update-code", action="store_true", help="Automatically inject mapping into DexKit.kt and tests")
+    parser.add_argument("--update-code", action="store_true", help="Automatically inject mapping into DexKit.kt, tests, and docs")
     args = parser.parse_args()
 
     if not os.path.exists(args.apk):
@@ -445,8 +496,16 @@ def main():
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         dexkit_kt = os.path.join(repo_root, "app/src/main/java/io/github/s1ddhants1/swiftbackupprem/DexKit.kt")
         test_kt = os.path.join(repo_root, "app/src/test/java/io/github/s1ddhants1/swiftbackupprem/DexKitVersionMapTest.kt")
+        doc_file = os.path.join(repo_root, "docs/REVERSE_ENGINEERING.md")
         update_dexkit_kt(dexkit_kt, vcode, entry_str)
         update_tests(test_kt, vcode, classes)
+        update_reverse_engineering_doc(doc_file, vcode, classes)
+
+    if "GITHUB_OUTPUT" in os.environ and vcode:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"version_code={vcode}\n")
+            f.write(f"version_name={vname}\n")
+            f.write(f"doc_title={os.path.basename(args.apk)}\n")
 
 if __name__ == "__main__":
     main()
