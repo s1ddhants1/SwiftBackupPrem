@@ -114,25 +114,28 @@ jobs:
             echo "[*] New mappings detected. Running test suite..."
             ./gradlew testDebugUnitTest
           else
-            echo "[*] No code changes detected. Skipping test execution."
+            echo "::error::No code changes were generated in DexKit.kt. Scan did not update mappings."
+            echo "::notice::If Telegram secrets (TG_API_ID, TG_API_HASH, TG_SESSION) are not configured, automated download from Telegram cannot proceed. Add secrets to repository or trigger workflow_dispatch with 'apk_url'."
+            exit 1
           fi
 
       - name: Create Pull Request with New Class Mappings
         uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           base: ${{ github.ref_name }}
-          branch: "auto-update/${{ github.ref_name }}/swiftbackup-${{ needs.check-release.outputs.version_code || 'release' }}"
-          commit-message: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
-          title: "feat(targets): add class mappings for ${{ needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
+          branch: "auto-update/${{ github.ref_name }}/swiftbackup-${{ steps.release_scanner.outputs.version_code || needs.check-release.outputs.version_code || 'release' }}"
+          commit-message: "feat(targets): add class mappings for ${{ steps.release_scanner.outputs.doc_title || needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
+          title: "feat(targets): add class mappings for ${{ steps.release_scanner.outputs.doc_title || needs.check-release.outputs.doc_title || 'new Swift Backup release' }}"
           body: |
             ### Automated Target Class Scanner Update
             
-            This pull request was automatically triggered because a new unmapped release was detected on the [Swift Backup Updates Telegram Channel](https://t.me/swiftbackupupdates):
+            This pull request was automatically triggered because a new unmapped release was detected:
             
             - **Target Branch**: `${{ github.ref_name }}`
-            - **Release**: `${{ needs.check-release.outputs.doc_title }}`
-            - **Version Code**: `${{ needs.check-release.outputs.version_code }}`
-            - **Telegram URL**: ${{ needs.check-release.outputs.url }}
+            - **Release**: `${{ steps.release_scanner.outputs.doc_title || needs.check-release.outputs.doc_title }}`
+            - **Version Code**: `${{ steps.release_scanner.outputs.version_code || needs.check-release.outputs.version_code }}`
+            - **Telegram URL**: ${{ needs.check-release.outputs.url || 'N/A (custom APK)' }}
             
             #### Automated Verification:
             - Scanned multi-DEX classes with [tools/scan_swiftbackup.py](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/tools/scan_swiftbackup.py).
@@ -143,3 +146,4 @@ jobs:
           labels: |
             automated-pr
             targets
+
