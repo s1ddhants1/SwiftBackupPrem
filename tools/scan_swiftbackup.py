@@ -369,9 +369,9 @@ def update_dexkit_kt(dexkit_file: str, version_code: int, entry_str: str) -> boo
         print(f"[!] Could not locate versionMap in {dexkit_file}")
         return False
 
-    replacement = match.group(1) + "\n" + entry_str + match.group(2)
+    new_content = content[:match.start()] + match.group(1) + "\n" + entry_str + match.group(2) + content[match.end():]
     with open(dexkit_file, "w", encoding="utf-8") as f:
-        f.write(replacement)
+        f.write(new_content)
     print(f"[+] Updated {dexkit_file} with version {version_code}")
     return True
 
