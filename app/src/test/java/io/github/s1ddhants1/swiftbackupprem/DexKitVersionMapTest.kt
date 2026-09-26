@@ -15,6 +15,7 @@ class DexKitVersionMapTest {
         assertTrue(versionMap.containsKey(620))
         assertTrue(versionMap.containsKey(623))
         assertTrue(versionMap.containsKey(626))
+        assertTrue(versionMap.containsKey(628))
     }
 
     @Test
@@ -72,5 +73,18 @@ class DexKitVersionMapTest {
         assertEquals("defpackage.re7", v626.settingsFragment)
         assertEquals("org.swiftapps.swiftbackup.settings.a", v626.settingsDetailFragment)
         assertEquals("defpackage.qm0", v626.baseSettingsFragment)
+
+        val v628 = versionMap[628]
+        assertNotNull(v628)
+        assertEquals("defpackage.jq5", v628!!.clientId)
+        assertEquals("defpackage.r84", v628.homeViewModel)
+        assertEquals("defpackage.x65", v628.authUser)
+        assertEquals("defpackage.v65", v628.anonUser)
+        assertEquals("defpackage.oi3", v628.firebaseWatcher)
+        assertEquals("defpackage.ih3", v628.fireSynchronizer)
+        assertEquals("defpackage.yg3", v628.fireSynchronizerSuccess)
+        assertEquals("defpackage.uf7", v628.settingsFragment)
+        assertEquals("org.swiftapps.swiftbackup.settings.a", v628.settingsDetailFragment)
+        assertEquals("defpackage.um0", v628.baseSettingsFragment)
     }
 }
