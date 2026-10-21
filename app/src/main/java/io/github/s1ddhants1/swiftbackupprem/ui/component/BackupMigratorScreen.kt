@@ -5,13 +5,12 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,14 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.s1ddhants1.swiftbackupprem.R
 import io.github.s1ddhants1.swiftbackupprem.ui.BackupMigratorUiEvent
@@ -61,13 +58,13 @@ fun BackupMigratorScreen(
             Tab(
                 selected = selectedTab == MigratorTab.LOCAL_MIGRATION,
                 onClick = { selectedTab = MigratorTab.LOCAL_MIGRATION },
-                text = { Text(stringResource(R.string.tab_local_migrator), fontWeight = FontWeight.SemiBold) },
+                text = { Text(stringResource(R.string.tab_local_migrator), style = MaterialTheme.typography.titleSmall) },
                 icon = { Icon(Icons.Default.FolderZip, contentDescription = null) }
             )
             Tab(
                 selected = selectedTab == MigratorTab.CLOUD_DISCOVERY,
                 onClick = { selectedTab = MigratorTab.CLOUD_DISCOVERY },
-                text = { Text(stringResource(R.string.tab_cloud_discovery), fontWeight = FontWeight.SemiBold) },
+                text = { Text(stringResource(R.string.tab_cloud_discovery), style = MaterialTheme.typography.titleSmall) },
                 icon = { Icon(Icons.Default.CloudSync, contentDescription = null) }
             )
         }
@@ -128,7 +125,6 @@ private fun LocalMigrationTabContent(
                         Text(
                             text = stringResource(R.string.migrator_permission_required_title),
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
@@ -192,7 +188,6 @@ private fun LocalMigrationTabContent(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
         }
@@ -246,7 +241,6 @@ private fun LocalMigrationTabContent(
                     label = { Text(stringResource(R.string.migrator_target_uid_label)) },
                     placeholder = { Text(stringResource(R.string.migrator_target_uid_placeholder)) },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
             }
@@ -264,37 +258,41 @@ private fun LocalMigrationTabContent(
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = if (state.exportPortableFormats) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, top = 2.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { viewModel.setExportPortableFormats(!state.exportPortableFormats) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (state.exportPortableFormats) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Checkbox(
-                            checked = state.exportPortableFormats,
-                            onCheckedChange = { viewModel.setExportPortableFormats(it) }
+                        .toggleable(
+                            value = state.exportPortableFormats,
+                            onValueChange = { viewModel.setExportPortableFormats(it) },
+                            role = Role.Checkbox
                         )
-                        Column(modifier = Modifier.weight(1f)) {
+                ) {
+                    ListItem(
+                        leadingContent = {
+                            Checkbox(
+                                checked = state.exportPortableFormats,
+                                onCheckedChange = null
+                            )
+                        },
+                        headlineContent = {
                             Text(
                                 text = stringResource(R.string.migrator_mode_portable_checkbox),
-                                fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                        },
+                        supportingContent = {
                             Text(
                                 text = stringResource(R.string.migrator_mode_portable_checkbox_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.bodySmall
                             )
-                        }
-                    }
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                            headlineColor = if (state.exportPortableFormats) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                            supportingColor = if (state.exportPortableFormats) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
             }
         }
@@ -311,7 +309,6 @@ private fun LocalMigrationTabContent(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
         }
@@ -326,8 +323,7 @@ private fun LocalMigrationTabContent(
                     ) {
                         Text(
                             text = state.currentStep.ifBlank { stringResource(R.string.migrator_status_processing) },
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleSmall
                         )
                         if (state.totalCount > 0) {
                             Text(
@@ -340,11 +336,11 @@ private fun LocalMigrationTabContent(
                     if (state.totalCount > 0) {
                         LinearProgressIndicator(
                             progress = { state.processedCount.toFloat() / state.totalCount.toFloat() },
-                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                            modifier = Modifier.fillMaxWidth()
                         )
                     } else {
                         LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
@@ -360,13 +356,12 @@ private fun LocalMigrationTabContent(
         } else {
             Button(
                 onClick = { viewModel.startMigration(appContext, prefs) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(50.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 enabled = state.sourcePath.isNotBlank() && state.sourceUid.isNotBlank() && state.targetPath.isNotBlank()
             ) {
                 Icon(Icons.Default.SyncAlt, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.migrator_btn_start), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(stringResource(R.string.migrator_btn_start), style = MaterialTheme.typography.labelLarge)
             }
         }
 
@@ -382,8 +377,7 @@ private fun LocalMigrationTabContent(
                         Text(
                             text = if (result.success) stringResource(R.string.migrator_result_success_title)
                             else stringResource(R.string.migrator_result_fail_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
 
@@ -411,24 +405,23 @@ private fun LocalMigrationTabContent(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = stringResource(R.string.migrator_logs_title),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp)
-                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                            .padding(8.dp)
+                            .heightIn(max = 200.dp),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest
                     ) {
-                        LazyColumn {
+                        LazyColumn(modifier = Modifier.padding(8.dp)) {
                             items(state.logs) { log ->
                                 Text(
                                     text = log,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -494,7 +487,7 @@ private fun CloudDiscoveryTabContent(
                     onPrefChange = { prefs.enableGoogleDriveScope = it }
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 SettingsSwitch(
                     label = stringResource(R.string.pref_cloud_discovery_title),
@@ -513,7 +506,7 @@ private fun CloudDiscoveryTabContent(
                     }
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 val isCloudDiscoveryEnabled = isCloudCapable && prefs.enableCloudDiscovery
                 val isSnapshotLocked = prefs.unlockLocalCloudFeatures
@@ -543,8 +536,7 @@ private fun CloudDiscoveryTabContent(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.label_firebase_rtdb),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                         Text(
                             text = if (isDbConfigured) prefs.firebaseDatabaseUrl else stringResource(R.string.pref_rtdb_not_configured),
@@ -554,7 +546,7 @@ private fun CloudDiscoveryTabContent(
                     }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 SettingsSwitch(
                     label = stringResource(R.string.pref_sync_metadata_firebase_title),
@@ -577,7 +569,6 @@ private fun CloudDiscoveryTabContent(
                             viewModel.syncFirebaseAll(appContext, prefs)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
                         enabled = canConfigureSync && !state.isSyncingFirebase
                     ) {
                         if (state.isSyncingFirebase) {
@@ -587,7 +578,7 @@ private fun CloudDiscoveryTabContent(
                         } else {
                             Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_sync_all_firebase), fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.btn_sync_all_firebase), style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -600,8 +591,7 @@ private fun CloudDiscoveryTabContent(
                     Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Text(
                         text = stringResource(R.string.cloud_cache_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
                 Text(
@@ -620,12 +610,11 @@ private fun CloudDiscoveryTabContent(
                             Toast.makeText(appContext, appContext.getString(R.string.msg_cloud_cache_cleared), Toast.LENGTH_SHORT).show()
                         } catch (_: Throwable) {}
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.btn_clear_cloud_cache))
+                    Text(stringResource(R.string.btn_clear_cloud_cache), style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -642,38 +631,51 @@ private fun ModeSelectionItem(
     onClick: () -> Unit
 ) {
     Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            RadioButton(selected = selected, onClick = onClick)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        ListItem(
+            leadingContent = {
+                RadioButton(selected = selected, onClick = null)
+            },
+            headlineContent = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            },
+            supportingContent = {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            colors = ListItemDefaults.colors(
+                containerColor = Color.Transparent,
+                headlineColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                supportingColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
     }
 }
 
 @Composable
 private fun MigratorCard(
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    OutlinedCard(
+    Card(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = containerColor),
-        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = MaterialTheme.shapes.large,
         content = content
     )
 }
@@ -694,8 +696,7 @@ private fun MigratorSectionCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
                 action?.invoke()

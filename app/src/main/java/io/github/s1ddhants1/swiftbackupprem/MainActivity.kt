@@ -15,7 +15,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,18 +22,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.*
-
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.s1ddhants1.swiftbackupprem.ui.BackupMigratorViewModel
@@ -43,13 +39,12 @@ import io.github.s1ddhants1.swiftbackupprem.ui.MainViewModel
 import io.github.s1ddhants1.swiftbackupprem.ui.component.AboutScreen
 import io.github.s1ddhants1.swiftbackupprem.ui.component.BackupMigratorScreen
 import io.github.s1ddhants1.swiftbackupprem.ui.component.CustomUidInputSection
-import io.github.s1ddhants1.swiftbackupprem.util.BackupMigratorEngine
 import io.github.s1ddhants1.swiftbackupprem.ui.component.FirebaseSetupScreen
 import io.github.s1ddhants1.swiftbackupprem.ui.component.SettingsSwitch
 import io.github.s1ddhants1.swiftbackupprem.ui.theme.Theme
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
+import io.github.s1ddhants1.swiftbackupprem.util.BackupMigratorEngine
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
-import io.github.s1ddhants1.swiftbackupprem.util.attempt
 import io.github.s1ddhants1.swiftbackupprem.util.rememberIsTvDevice
 import io.github.s1ddhants1.swiftbackupprem.util.tvFocusable
 import kotlinx.coroutines.launch
@@ -168,7 +163,7 @@ class MainActivity : ComponentActivity() {
                                                 AppScreen.FirebaseSetup -> R.string.screen_firebase_setup
                                             }
                                         ),
-                                        fontWeight = FontWeight.Bold
+                                        style = MaterialTheme.typography.titleLarge
                                     )
                                 }
                             },
@@ -243,32 +238,44 @@ class MainActivity : ComponentActivity() {
                             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                         ) {
-                            Surface(tonalElevation = 3.dp, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    ActionButton(
-                                        text = stringResource(R.string.btn_force_stop),
-                                        icon = Icons.Default.PowerSettingsNew,
-                                        containerColor = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.weight(1f)
+                                    FilledTonalButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val stopped = AppUtils.forceStopSwiftBackup(context)
+                                                snackbarHostState.showSnackbar(
+                                                    if (stopped) getString(R.string.msg_swift_backup_force_stopped)
+                                                    else getString(R.string.msg_opened_swift_backup_settings)
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        ),
+                                        modifier = Modifier.weight(1f).tvFocusable()
                                     ) {
-                                        coroutineScope.launch {
-                                            val stopped = AppUtils.forceStopSwiftBackup(context)
-                                            snackbarHostState.showSnackbar(
-                                                if (stopped) getString(R.string.msg_swift_backup_force_stopped)
-                                                else getString(R.string.msg_opened_swift_backup_settings)
-                                            )
-                                        }
+                                        Icon(Icons.Default.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.btn_force_stop), style = MaterialTheme.typography.labelLarge)
                                     }
-                                    ActionButton(
-                                        text = stringResource(R.string.btn_open_app),
-                                        icon = Icons.AutoMirrored.Filled.Launch,
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.weight(1f)
+                                    Button(
+                                        onClick = { AppUtils.openSwiftBackup(context) },
+                                        modifier = Modifier.weight(1f).tvFocusable()
                                     ) {
-                                        AppUtils.openSwiftBackup(context)
+                                        Icon(Icons.AutoMirrored.Filled.Launch, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.btn_open_app), style = MaterialTheme.typography.labelLarge)
                                     }
                                 }
                             }
@@ -311,8 +318,6 @@ private fun SettingsScreenContent(
     onOpenFirebaseSetup: () -> Unit,
     onOpenMigrator: () -> Unit
 ) {
-    val context = LocalContext.current
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -322,39 +327,38 @@ private fun SettingsScreenContent(
         FrameworkStatusBanner(uiState = uiState)
 
         if (uiState.isIntegrated) {
-            OutlinedCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WorkOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.integrated_mode_card_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.WorkOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    headlineContent = {
+                        Text(
+                            text = stringResource(R.string.integrated_mode_card_desc),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
             }
         }
 
         if (!uiState.isIntegrated) {
-            OutlinedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
                 SettingsSwitch(
                     label = stringResource(R.string.pref_enable_premium_title),
@@ -362,14 +366,14 @@ private fun SettingsScreenContent(
                     pref = prefs.enablePremium,
                     onPrefChange = { prefs.enablePremium = it }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsSwitch(
                     label = stringResource(R.string.pref_disable_telemetry_title),
                     secondaryLabel = stringResource(R.string.pref_disable_telemetry_subtitle),
                     pref = prefs.disableTelemetry,
                     onPrefChange = { prefs.disableTelemetry = it }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 val firebaseConfigured = prefs.toConfig().isCompleteFirebaseConfig
                 SettingsSwitch(
@@ -406,14 +410,14 @@ private fun SettingsScreenContent(
                         }
                     } else null
                 )
-                }
+            }
         }
 
         if (!uiState.isIntegrated) {
-            OutlinedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
                 SettingsSwitch(
                     label = stringResource(R.string.pref_unlock_local_cloud_features_title),
@@ -454,50 +458,48 @@ private fun SettingsScreenContent(
             }
         }
 
-        OutlinedCard(
+        Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             onClick = onOpenMigrator
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
-                    .tvFocusable(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.DriveFileMove,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
+            ListItem(
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.DriveFileMove,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
+                headlineContent = {
                     Text(
                         text = stringResource(R.string.screen_backup_migrator),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleMedium
                     )
+                },
+                supportingContent = {
                     Text(
                         text = stringResource(R.string.cloud_tab_header_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                }
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                },
+                trailingContent = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier.tvFocusable()
+            )
         }
 
         Spacer(modifier = Modifier.height(64.dp))
     }
 }
-
 
 @Composable
 private fun FrameworkStatusBanner(
@@ -554,25 +556,5 @@ private fun FrameworkStatusBanner(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ActionButton(
-    text: String,
-    icon: ImageVector,
-    containerColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
-        modifier = modifier.heightIn(min = 46.dp).tvFocusable(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-    ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, softWrap = true)
     }
 }

@@ -43,7 +43,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests and Android Lint
-        run: ./gradlew test lintNormalDebug lintLegacyDebug
+        run: ./gradlew test lintDebug lintLegacyDebug
 
       - name: Restore Keystore
         env:
@@ -67,7 +67,7 @@ jobs:
           fi
 
       - name: Assemble Release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleAllRelease
 
       - name: Print Release Signing Certificate
         run: |

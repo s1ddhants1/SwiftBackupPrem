@@ -19,23 +19,23 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.s1ddhants1.swiftbackupprem.BuildConfig
 import io.github.s1ddhants1.swiftbackupprem.R
-
 
 private data class Contributor(
     @DrawableRes val avatarRes: Int,
@@ -80,7 +80,7 @@ fun AboutScreen() {
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_logo),
@@ -92,54 +92,26 @@ fun AboutScreen() {
             Text(
                 text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                Text(
-                    text = stringResource(R.string.about_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
+            SuggestionChip(
+                onClick = {},
+                label = {
+                    Text(
+                        text = stringResource(R.string.about_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            )
         }
 
         SettingsSectionCard(title = stringResource(R.string.about_authors_maintainers)) {
             CONTRIBUTORS.forEachIndexed { index, contributor ->
                 if (index > 0) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
                 ContributorItemRow(contributor = contributor, onOpenUrl = { uriHandler.openUri(it) })
-            }
-        }
-
-        SettingsSectionCard(title = stringResource(R.string.about_libraries_technologies)) {
-            val libraries = listOf(
-                R.string.about_lib_dexkit,
-                R.string.about_lib_libxposed,
-                R.string.about_lib_compose,
-                R.string.about_lib_serialization
-            )
-            libraries.forEachIndexed { index, libRes ->
-                if (index > 0) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
-                }
-                Text(
-                    text = stringResource(libRes),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
             }
         }
 
@@ -151,34 +123,20 @@ fun AboutScreen() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilledTonalIconButton(
-                onClick = { uriHandler.openUri("https://github.com/s1ddhants1/SwiftBackupPrem") },
-                shape = CircleShape,
-                modifier = Modifier.size(48.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
+                onClick = { uriHandler.openUri("https://github.com/s1ddhants1/SwiftBackupPrem") }
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_github_logo),
-                    contentDescription = stringResource(R.string.btn_view_source_github),
-                    modifier = Modifier.size(24.dp)
+                    contentDescription = stringResource(R.string.btn_view_source_github)
                 )
             }
 
             FilledTonalIconButton(
-                onClick = { uriHandler.openUri("https://t.me/SwiftBackupPrem") },
-                shape = CircleShape,
-                modifier = Modifier.size(48.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
+                onClick = { uriHandler.openUri("https://t.me/SwiftBackupPrem") }
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_telegram_logo),
-                    contentDescription = stringResource(R.string.btn_telegram_support),
-                    modifier = Modifier.size(24.dp)
+                    contentDescription = stringResource(R.string.btn_telegram_support)
                 )
             }
         }
@@ -192,16 +150,8 @@ private fun ContributorItemRow(
     contributor: Contributor,
     onOpenUrl: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.weight(1f)
-        ) {
+    ListItem(
+        leadingContent = {
             Image(
                 painter = painterResource(id = contributor.avatarRes),
                 contentDescription = stringResource(contributor.avatarCdRes),
@@ -210,38 +160,30 @@ private fun ContributorItemRow(
                     .size(40.dp)
                     .clip(CircleShape)
             )
-
-            Column {
-                Text(
-                    text = contributor.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = stringResource(contributor.roleRes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            contributor.githubUrl?.let { url ->
-                IconButton(
-                    onClick = { onOpenUrl(url) },
-                    modifier = Modifier.size(36.dp)
-                ) {
+        },
+        headlineContent = {
+            Text(
+                text = contributor.name,
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
+        supportingContent = {
+            Text(
+                text = stringResource(contributor.roleRes),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        trailingContent = contributor.githubUrl?.let { url ->
+            {
+                IconButton(onClick = { onOpenUrl(url) }) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_github_logo),
                         contentDescription = stringResource(R.string.cd_github_icon),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        }
-    }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }

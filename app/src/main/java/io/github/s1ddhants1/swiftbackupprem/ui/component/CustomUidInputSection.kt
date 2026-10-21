@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -178,8 +177,7 @@ fun CustomUidInputSection(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                } else null,
-                shape = RoundedCornerShape(8.dp)
+                } else null
             )
 
             nonAnonymousDetectedUids.forEach { itemUid ->
@@ -205,8 +203,7 @@ fun CustomUidInputSection(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                    } else null,
-                    shape = RoundedCornerShape(8.dp)
+                    } else null
                 )
             }
 
@@ -233,8 +230,7 @@ fun CustomUidInputSection(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                } else null,
-                shape = RoundedCornerShape(8.dp)
+                } else null
             )
         }
 
@@ -292,7 +288,6 @@ fun CustomUidInputSection(
                         imeAction = ImeAction.Done
                     ),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
 

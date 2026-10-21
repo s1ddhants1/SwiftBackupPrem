@@ -36,7 +36,7 @@ fun getGitCommitHash(): String = try {
     "unknown"
 }
 
-val appVersionCode = 310
+val appVersionCode = 320
 fun getVersionChannel(): String = try {
     val process = ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD")
         .directory(rootDir)
@@ -68,7 +68,7 @@ fun getCommitCount(): String = try {
 
 val channel = getVersionChannel()
 val gitHash = getGitCommitHash()
-val appVersionName = if (channel == "-testing") "testing${getCommitCount()}-$gitHash" else "3.1.0$channel"
+val appVersionName = if (channel == "-testing") "testing${getCommitCount()}-$gitHash" else "3.2.0$channel"
 
 apksign {
     storeFileProperty = "KEYSTORE_FILE"
@@ -175,6 +175,8 @@ androidComponents {
 }
 
 val copyReleaseApks = tasks.register<Copy>("copyReleaseApks") {
+    mustRunAfter(tasks.matching { it.name.startsWith("package") && it.name.endsWith("Release") })
+    mustRunAfter(tasks.matching { it.name.startsWith("assemble") && it.name.endsWith("Release") })
     from(
         layout.buildDirectory.dir("outputs/apk/normal/release"),
         layout.buildDirectory.dir("outputs/apk/legacy/release")
@@ -184,6 +186,8 @@ val copyReleaseApks = tasks.register<Copy>("copyReleaseApks") {
 }
 
 val copyDebugApks = tasks.register<Copy>("copyDebugApks") {
+    mustRunAfter(tasks.matching { it.name.startsWith("package") && it.name.endsWith("Debug") })
+    mustRunAfter(tasks.matching { it.name.startsWith("assemble") && it.name.endsWith("Debug") })
     from(
         layout.buildDirectory.dir("outputs/apk/normal/debug"),
         layout.buildDirectory.dir("outputs/apk/legacy/debug")
@@ -192,12 +196,86 @@ val copyDebugApks = tasks.register<Copy>("copyDebugApks") {
     into(layout.buildDirectory.dir("outputs/apk/debug"))
 }
 
+afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        setDependsOn(listOf("assembleNormalRelease"))
+    }
+    tasks.named("assembleDebug").configure {
+        setDependsOn(listOf("assembleNormalDebug"))
+    }
+}
+
 tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(copyReleaseApks)
 }
 
 tasks.matching { it.name == "assembleDebug" }.configureEach {
     finalizedBy(copyDebugApks)
+}
+
+tasks.matching { it.name == "assembleLegacyRelease" }.configureEach {
+    finalizedBy(copyReleaseApks)
+}
+
+tasks.matching { it.name == "assembleLegacyDebug" }.configureEach {
+    finalizedBy(copyDebugApks)
+}
+
+tasks.register("assembleAll") {
+    group = "build"
+    description = "Assembles all variants across all flavors."
+    dependsOn("assembleNormalDebug", "assembleNormalRelease", "assembleLegacyDebug", "assembleLegacyRelease")
+    finalizedBy(copyReleaseApks, copyDebugApks)
+}
+
+tasks.register("assembleAllDebug") {
+    group = "build"
+    description = "Assembles all debug variants across all flavors."
+    dependsOn("assembleNormalDebug", "assembleLegacyDebug")
+    finalizedBy(copyDebugApks)
+}
+
+tasks.register("assembleAllRelease") {
+    group = "build"
+    description = "Assembles all release variants across all flavors."
+    dependsOn("assembleNormalRelease", "assembleLegacyRelease")
+    finalizedBy(copyReleaseApks)
+}
+
+tasks.register("installDebug") {
+    group = "install"
+    description = "Installs the Debug build of the default variant."
+    dependsOn("installNormalDebug")
+}
+
+tasks.register("installRelease") {
+    group = "install"
+    description = "Installs the Release build of the default variant."
+    dependsOn("installNormalRelease")
+}
+
+tasks.register("testDebugUnitTest") {
+    group = "verification"
+    description = "Runs unit tests for the default variant."
+    dependsOn("testNormalDebugUnitTest")
+}
+
+tasks.register("testReleaseUnitTest") {
+    group = "verification"
+    description = "Runs unit tests for the default release variant."
+    dependsOn("testNormalReleaseUnitTest")
+}
+
+tasks.register("lintDebug") {
+    group = "verification"
+    description = "Runs lint for the default variant."
+    dependsOn("lintNormalDebug")
+}
+
+tasks.register("lintRelease") {
+    group = "verification"
+    description = "Runs lint for the default release variant."
+    dependsOn("lintNormalRelease")
 }
 
 

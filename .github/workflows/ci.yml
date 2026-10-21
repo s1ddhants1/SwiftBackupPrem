@@ -59,7 +59,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests and Android Lint
-        run: ./gradlew test lintNormalDebug lintLegacyDebug
+        run: ./gradlew test lintDebug lintLegacyDebug
 
       - name: Upload Test and Lint Reports
         uses: actions/upload-artifact@v7
@@ -121,7 +121,7 @@ jobs:
           fi
 
       - name: Assemble Debug and Release APK
-        run: ./gradlew assembleDebug assembleRelease
+        run: ./gradlew assembleAllDebug assembleAllRelease
 
       - name: Upload Release APK & ProGuard Mapping
         uses: actions/upload-artifact@v7
