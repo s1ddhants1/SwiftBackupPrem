@@ -43,7 +43,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests and Android Lint
-        run: ./gradlew testDebugUnitTest lintDebug
+        run: ./gradlew test lintNormalDebug lintLegacyDebug
 
       - name: Restore Keystore
         env:
@@ -79,7 +79,7 @@ jobs:
         with:
           files: |
             app/build/outputs/apk/release/*.apk
-            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/mapping/**/mapping.txt
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, 'preview') || contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}

@@ -112,7 +112,7 @@ jobs:
           git status
           if [ -n "$(git status --porcelain app/src/main/java/io/github/s1ddhants1/swiftbackupprem/DexKit.kt)" ]; then
             echo "[*] New mappings detected. Running test suite..."
-            ./gradlew testDebugUnitTest
+            ./gradlew test
           else
             echo "::error::No code changes were generated in DexKit.kt. Scan did not update mappings."
             echo "::notice::If Telegram secrets (TG_API_ID, TG_API_HASH, TG_SESSION) are not configured, automated download from Telegram cannot proceed. Add secrets to repository or trigger workflow_dispatch with 'apk_url'."

@@ -174,6 +174,34 @@ androidComponents {
     }
 }
 
+val copyReleaseApks = tasks.register<Copy>("copyReleaseApks") {
+    from(
+        layout.buildDirectory.dir("outputs/apk/normal/release"),
+        layout.buildDirectory.dir("outputs/apk/legacy/release")
+    )
+    include("*.apk")
+    into(layout.buildDirectory.dir("outputs/apk/release"))
+}
+
+val copyDebugApks = tasks.register<Copy>("copyDebugApks") {
+    from(
+        layout.buildDirectory.dir("outputs/apk/normal/debug"),
+        layout.buildDirectory.dir("outputs/apk/legacy/debug")
+    )
+    include("*.apk")
+    into(layout.buildDirectory.dir("outputs/apk/debug"))
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(copyReleaseApks)
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy(copyDebugApks)
+}
+
+
+
 dependencies {
     "normalCompileOnly"(libs.libxposed.api)
     "normalImplementation"(libs.libxposed.service)
