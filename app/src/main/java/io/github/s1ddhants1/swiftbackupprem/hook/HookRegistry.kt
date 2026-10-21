@@ -1,54 +1,71 @@
 package io.github.s1ddhants1.swiftbackupprem.hook
 
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedModule
-import io.github.s1ddhants1.swiftbackupprem.Module
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
 import java.lang.reflect.Executable
 
-private val HOOK_ID_SANITIZER = Regex("[^A-Za-z0-9_.#-]")
+const val PRIORITY_DEFAULT = 50
+const val PRIORITY_LOWEST = -10000
+const val PRIORITY_HIGHEST = 10000
 
-fun XposedModule.hookTracked(
-    executable: Executable,
-    idPrefix: String = "${executable.declaringClass.name}#${executable.name}",
-    priority: Int = XposedInterface.PRIORITY_DEFAULT,
-    deoptimize: Boolean = false
-): XposedInterface.HookBuilder {
-    if (deoptimize) {
-        attempt("deoptimize ${executable.declaringClass.simpleName}#${executable.name}", silent = true) {
-            deoptimize(executable)
-        }
-    }
+enum class ExceptionMode {
+    DEFAULT,
+    PROTECTIVE,
+    PASSTHROUGH
+}
 
-    val params = executable.parameterTypes.joinToString(",") { it.name }
-    val sig = "${executable.declaringClass.name}#${executable.name}($params)"
-    var hookId = "${idPrefix.replace(HOOK_ID_SANITIZER, "_")}:${sig.hashCode().toUInt().toString(16)}"
+interface Chain {
+    val thisObject: Any?
+    val args: List<Any?>
+    fun getArg(index: Int): Any? = args.getOrNull(index)
+    fun proceed(): Any?
+    fun proceed(args: Array<Any?>): Any?
+}
 
-    val builder = hook(executable)
-        .setPriority(priority)
-        .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+fun interface HookHandle {
+    fun unhook()
+}
 
-    if (apiVersion >= XposedInterface.API_102) {
-        builder.setId(hookId)
-    }
-    val mod = this as? Module
+interface HookBuilder {
+    fun setPriority(priority: Int): HookBuilder = this
+    fun setExceptionMode(mode: ExceptionMode): HookBuilder = this
+    fun setId(id: String?): HookBuilder = this
+    fun intercept(hooker: (Chain) -> Any?): HookHandle
+}
 
-    return object : XposedInterface.HookBuilder {
-        override fun setPriority(priority: Int) = apply { builder.setPriority(priority) }
-        override fun setExceptionMode(mode: XposedInterface.ExceptionMode) = apply { builder.setExceptionMode(mode) }
-        override fun setId(id: String?) = apply {
-            if (id != null) hookId = id
-            if (apiVersion >= XposedInterface.API_102) builder.setId(id)
-        }
-        override fun intercept(hooker: XposedInterface.Hooker): XposedInterface.HookHandle =
-            builder.intercept(hooker).also { mod?.rememberHook(hookId, it) }
-    }
+interface HookContext {
+    fun hookTracked(
+        executable: Executable,
+        idPrefix: String = "${executable.declaringClass.name}#${executable.name}",
+        priority: Int = PRIORITY_DEFAULT,
+        deoptimize: Boolean = false
+    ): HookBuilder
 }
 
 fun Any.getFieldValue(name: String): Any? = attempt("get field $name", silent = true) {
-    javaClass.getDeclaredField(name).apply { isAccessible = true }.get(this)
+    var c: Class<*>? = this.javaClass
+    while (c != null && c != Any::class.java) {
+        try {
+            val f = c.getDeclaredField(name)
+            f.isAccessible = true
+            return@attempt f.get(this)
+        } catch (_: NoSuchFieldException) {
+            c = c.superclass
+        }
+    }
+    null
 }
 
-inline fun <reified T> Any.getTypedFieldValue(name: String): T? = getFieldValue(name) as? T
-
-
+fun Any.setFieldValue(name: String, value: Any?): Boolean = attempt("set field $name", silent = true) {
+    var c: Class<*>? = this.javaClass
+    while (c != null && c != Any::class.java) {
+        try {
+            val f = c.getDeclaredField(name)
+            f.isAccessible = true
+            f.set(this, value)
+            return@attempt true
+        } catch (_: NoSuchFieldException) {
+            c = c.superclass
+        }
+    }
+    false
+} ?: false

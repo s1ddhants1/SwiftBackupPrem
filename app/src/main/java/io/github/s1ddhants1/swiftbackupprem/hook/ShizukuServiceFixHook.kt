@@ -3,7 +3,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 import android.content.Context
 import android.util.Log
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
@@ -23,7 +22,7 @@ object ShizukuServiceFixHook : HookHandler {
     )
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -44,7 +43,7 @@ object ShizukuServiceFixHook : HookHandler {
     }
 
     fun hookSbaMethods(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         sourceDir: String,
         isIntegrated: Boolean
@@ -54,7 +53,7 @@ object ShizukuServiceFixHook : HookHandler {
     }
 
     private fun hookSbaBindMethod(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         sourceDir: String,
         isIntegrated: Boolean
@@ -94,14 +93,13 @@ object ShizukuServiceFixHook : HookHandler {
     }
 
     private fun hookSbaManagerMethods(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         sourceDir: String,
         isIntegrated: Boolean
     ) {
         val methods = findSbaManagerMethods(classLoader, sourceDir) ?: return
 
-        // 1. Hook getter method (mz6.v)
         methods.getterMethod?.let { getterMethod ->
             attempt("hook Shizuku SBA service getter for crash protection", silent = true) {
                 module.hookTracked(
@@ -122,7 +120,6 @@ object ShizukuServiceFixHook : HookHandler {
             }
         }
 
-        // 2. Hook read mode selector (mz6.x)
         methods.readModeMethod?.let { readModeMethod ->
             if (isIntegrated) {
                 attempt("hook SBA read execution mode for Integrated Mode redirection", silent = true) {
@@ -143,7 +140,6 @@ object ShizukuServiceFixHook : HookHandler {
             }
         }
 
-        // 3. Hook op mode selector (mz6.w)
         methods.opModeMethod?.let { opModeMethod ->
             if (isIntegrated) {
                 attempt("hook SBA op execution mode for Integrated Mode redirection", silent = true) {
@@ -220,7 +216,6 @@ object ShizukuServiceFixHook : HookHandler {
                     return@use method
                 }
 
-                // Fallback: search by class
                 val results = bridge.findClass {
                     matcher {
                         usingStrings("swiftbackup_sba", "sba")
@@ -239,21 +234,18 @@ object ShizukuServiceFixHook : HookHandler {
     fun findSbaManagerMethods(classLoader: ClassLoader, sourceDir: String): SbaManagerMethods? {
         return attempt("find SBA manager methods via DexKit", silent = true) {
             DexKitBridge.create(sourceDir).use { bridge ->
-                // 1. Getter method by exact string invariant
                 val getterMethod = bridge.findMethod {
                     matcher {
                         usingStrings("Shizuku SBA service is unavailable for SBA ")
                     }
                 }.firstOrNull()?.getMethodInstance(classLoader)
 
-                // 2. Read mode method by exact string invariant
                 val readModeMethod = bridge.findMethod {
                     matcher {
                         usingStrings("Privileged access is required for SBA file read: ")
                     }
                 }.firstOrNull()?.getMethodInstance(classLoader)
 
-                // 3. Op mode method by exact string invariant
                 val opModeMethod = bridge.findMethod {
                     matcher {
                         usingStrings("Root access is required for SBA ")
@@ -264,7 +256,6 @@ object ShizukuServiceFixHook : HookHandler {
                 var finalReadMode = readModeMethod
                 var finalOpMode = opModeMethod
 
-                // Structural fallback if any method wasn't located by exact string
                 if (finalGetter == null || finalReadMode == null || finalOpMode == null) {
                     val managerClass = bridge.findClass {
                         matcher {

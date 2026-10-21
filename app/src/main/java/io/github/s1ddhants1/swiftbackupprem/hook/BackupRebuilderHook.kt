@@ -5,7 +5,6 @@ import android.content.Context
 import android.util.Log
 import androidx.annotation.Keep
 import androidx.core.content.pm.PackageInfoCompat
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
@@ -33,7 +32,7 @@ object BackupRebuilderHook : HookHandler {
     )
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,

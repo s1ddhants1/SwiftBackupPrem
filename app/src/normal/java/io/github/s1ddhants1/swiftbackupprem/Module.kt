@@ -12,14 +12,74 @@ import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
 import io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
+import java.lang.reflect.Executable
 import java.util.concurrent.ConcurrentHashMap
 
 @Keep
-class Module : XposedModule() {
+class Module : XposedModule(), HookContext {
     private val hookHandles = ConcurrentHashMap<String, XposedInterface.HookHandle>()
 
     fun rememberHook(id: String?, handle: XposedInterface.HookHandle) {
         if (id != null) hookHandles[id] = handle
+    }
+
+    override fun hookTracked(
+        executable: Executable,
+        idPrefix: String,
+        priority: Int,
+        deoptimize: Boolean
+    ): HookBuilder {
+        if (deoptimize) {
+            attempt("deoptimize ${executable.declaringClass.simpleName}#${executable.name}", silent = true) {
+                deoptimize(executable)
+            }
+        }
+
+        val params = executable.parameterTypes.joinToString(",") { it.name }
+        val sig = "${executable.declaringClass.name}#${executable.name}($params)"
+        var hookId = "${idPrefix.replace(Regex("[^A-Za-z0-9_.#-]"), "_")}:${sig.hashCode().toUInt().toString(16)}"
+
+        val builder = hook(executable)
+            .setPriority(priority)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+
+        if (apiVersion >= XposedInterface.API_102) {
+            builder.setId(hookId)
+        }
+
+        return object : HookBuilder {
+            override fun setPriority(priority: Int) = apply { builder.setPriority(priority) }
+            override fun setExceptionMode(mode: ExceptionMode) = apply {
+                val libMode = when (mode) {
+                    ExceptionMode.DEFAULT -> XposedInterface.ExceptionMode.DEFAULT
+                    ExceptionMode.PROTECTIVE -> XposedInterface.ExceptionMode.PROTECTIVE
+                    ExceptionMode.PASSTHROUGH -> XposedInterface.ExceptionMode.PASSTHROUGH
+                }
+                builder.setExceptionMode(libMode)
+            }
+            override fun setId(id: String?) = apply {
+                if (id != null) hookId = id
+                if (apiVersion >= XposedInterface.API_102) builder.setId(id)
+            }
+            override fun intercept(hooker: (Chain) -> Any?): HookHandle {
+                val handle = builder.intercept { chain ->
+                    val wrappedChain = object : Chain {
+                        override val thisObject: Any? get() = chain.thisObject
+                        override val args: List<Any?> get() = chain.args.toList()
+                        override fun getArg(index: Int): Any? = chain.args.getOrNull(index)
+                        override fun proceed(): Any? = chain.proceed()
+                        override fun proceed(args: Array<Any?>): Any? = chain.proceed(args)
+                    }
+                    hooker(wrappedChain)
+                }
+                rememberHook(hookId, handle)
+                return HookHandle {
+                    try {
+                        handle.unhook()
+                    } catch (_: Throwable) {}
+                }
+            }
+        }
     }
 
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
@@ -42,7 +102,7 @@ class Module : XposedModule() {
         hookTracked(
             onCreateMethod,
             idPrefix = "swift-app-on-create",
-            priority = XposedInterface.PRIORITY_HIGHEST,
+            priority = PRIORITY_HIGHEST,
             deoptimize = true
         ).intercept { chain ->
             val ctx = chain.thisObject as? Context
@@ -60,7 +120,7 @@ class Module : XposedModule() {
 
     override fun onHotReloading(param: XposedModuleInterface.HotReloadingParam): Boolean {
         Log.i(Consts.TAG, "Preparing old module generation for hot reload...")
-        
+
         val state = Bundle().apply {
             putLong("hot_reload_timestamp", System.currentTimeMillis())
         }
@@ -138,7 +198,7 @@ class Module : XposedModule() {
         }
 
         attempt("export detected UIDs and auth state to storage", silent = true) {
-            val uids = BackupCrypto.resolveCandidateUids(ctx, cl, targets)
+            val uids = BackupCrypto.resolveCandidateUids(ctx, cl, targets, prefs)
             BackupCrypto.syncDetectedUids(ctx, uids)
 
             val exportDirs = listOf(
@@ -160,4 +220,3 @@ class Module : XposedModule() {
         return Pair(targets, prefs)
     }
 }
-

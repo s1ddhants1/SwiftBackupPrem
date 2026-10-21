@@ -2,8 +2,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 
 import android.content.Context
 import android.util.Log
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
@@ -37,7 +35,7 @@ object TelemetrySuppressionHook : HookHandler {
     )
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -69,7 +67,7 @@ object TelemetrySuppressionHook : HookHandler {
                     m.name in crashlyticsNullMethods -> hookNull(module, m, "telemetry-crashlytics-${m.name}")
                     m.name.startsWith("set") && m.name.endsWith("CollectionEnabled") -> hookDisableCollection(module, m, "telemetry-crashlytics-${m.name}")
                     m.name == "checkForUnsentReports" -> attempt("hook ${m.name}", silent = true) {
-                        module.hookTracked(m, idPrefix = "telemetry-crashlytics-checkForUnsentReports", priority = XposedInterface.PRIORITY_LOWEST).intercept { falseTask }
+                        module.hookTracked(m, idPrefix = "telemetry-crashlytics-checkForUnsentReports", priority = PRIORITY_LOWEST).intercept { falseTask }
                     }
                 }
             }
@@ -89,7 +87,7 @@ object TelemetrySuppressionHook : HookHandler {
         attempt("hook TransportRuntime.schedule", silent = true) {
             val runtimeClass = classLoader.loadClass("com.google.android.datatransport.runtime.TransportRuntime")
             runtimeClass.declaredMethods.filter { it.name == "schedule" }.forEach { m ->
-                module.hookTracked(m, idPrefix = "telemetry-transport-schedule", priority = XposedInterface.PRIORITY_LOWEST).intercept { chain ->
+                module.hookTracked(m, idPrefix = "telemetry-transport-schedule", priority = PRIORITY_LOWEST).intercept { chain ->
                     chain.args.lastOrNull()?.let { cb ->
                         attempt("invoke schedule callback", silent = true) {
                             cb.javaClass.getMethod("onSchedule", Exception::class.java).invoke(cb, null)
@@ -105,27 +103,27 @@ object TelemetrySuppressionHook : HookHandler {
             val backendResponseClass = classLoader.loadClass("com.google.android.datatransport.runtime.backends.BackendResponse")
             val dummyResponse = backendResponseClass.getMethod("ok", Long::class.javaPrimitiveType).invoke(null, 1000L)
             cctClass.declaredMethods.filter { it.name == "send" || (it.parameterCount == 1 && it.returnType.simpleName == "BackendResponse") }.forEach { m ->
-                module.hookTracked(m, idPrefix = "telemetry-cct-${m.name}", priority = XposedInterface.PRIORITY_LOWEST).intercept { dummyResponse }
+                module.hookTracked(m, idPrefix = "telemetry-cct-${m.name}", priority = PRIORITY_LOWEST).intercept { dummyResponse }
             }
         }
     }
 
-    private fun hookNull(module: XposedModule, m: java.lang.reflect.Method, idPrefix: String) {
+    private fun hookNull(module: HookContext, m: java.lang.reflect.Method, idPrefix: String) {
         attempt("hook ${m.name}", silent = true) {
-            module.hookTracked(m, idPrefix = idPrefix, priority = XposedInterface.PRIORITY_LOWEST).intercept { null }
+            module.hookTracked(m, idPrefix = idPrefix, priority = PRIORITY_LOWEST).intercept { null }
         }
     }
 
-    private fun hookDisableCollection(module: XposedModule, m: java.lang.reflect.Method, idPrefix: String) {
+    private fun hookDisableCollection(module: HookContext, m: java.lang.reflect.Method, idPrefix: String) {
         attempt("hook ${m.name}", silent = true) {
-            module.hookTracked(m, idPrefix = idPrefix, priority = XposedInterface.PRIORITY_LOWEST).intercept { chain ->
+            module.hookTracked(m, idPrefix = idPrefix, priority = PRIORITY_LOWEST).intercept { chain ->
                 if (chain.args.isNotEmpty()) chain.proceed(arrayOf(java.lang.Boolean.FALSE)) else chain.proceed()
             }
         }
     }
 
     private fun hookMethodsNull(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         className: String,
         predicate: (String) -> Boolean

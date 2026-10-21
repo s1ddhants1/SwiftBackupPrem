@@ -2,7 +2,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 
 import android.content.Context
 import android.util.Log
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
@@ -10,7 +9,7 @@ import io.github.s1ddhants1.swiftbackupprem.util.attempt
 object PremiumFeatureHook : HookHandler {
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -31,7 +30,7 @@ object PremiumFeatureHook : HookHandler {
         }
     }
 
-    fun hookSwiftAppPremium(module: XposedModule, swiftApp: Any?, prefs: PreferencesManager) {
+    fun hookSwiftAppPremium(module: HookContext, swiftApp: Any?, prefs: PreferencesManager) {
         if (swiftApp == null) return
         attempt("hook SwiftApp premium LiveData") {
             for (field in swiftApp.javaClass.declaredFields) {
@@ -82,7 +81,7 @@ object PremiumFeatureHook : HookHandler {
         }
     }
 
-    private fun hookKnownClasses(module: XposedModule, cl: ClassLoader, prefs: PreferencesManager, resolvedVClass: Class<*>?) {
+    private fun hookKnownClasses(module: HookContext, cl: ClassLoader, prefs: PreferencesManager, resolvedVClass: Class<*>?) {
         if (resolvedVClass?.name != "org.swiftapps.swiftbackup.common.V") {
             attempt("load and hook known V class fallback", silent = true) {
                 hookVClass(module, cl.loadClass("org.swiftapps.swiftbackup.common.V"), prefs)
@@ -103,7 +102,7 @@ object PremiumFeatureHook : HookHandler {
         }
     }
 
-    private fun hookVClass(module: XposedModule, targetClass: Class<*>, prefs: PreferencesManager) {
+    private fun hookVClass(module: HookContext, targetClass: Class<*>, prefs: PreferencesManager) {
         Log.d(Consts.TAG, "Hooking V class: ${targetClass.name} (isPremium=${prefs.enablePremium})")
         attempt("set V.vp field") {
             targetClass.getDeclaredField("vp").apply { isAccessible = true }.set(null, prefs.enablePremium)
@@ -152,7 +151,7 @@ object PremiumFeatureHook : HookHandler {
         }
     }
 
-    private fun hookHomeViewModelClass(module: XposedModule, targetClass: Class<*>, prefs: PreferencesManager) {
+    private fun hookHomeViewModelClass(module: HookContext, targetClass: Class<*>, prefs: PreferencesManager) {
         Log.d(Consts.TAG, "Hooking HomeViewModel class: ${targetClass.name} (isPremium=${prefs.enablePremium})")
         for (m in targetClass.declaredMethods) {
             if (m.parameterCount == 1 && (m.parameterTypes[0] == Boolean::class.javaPrimitiveType || m.parameterTypes[0] == Boolean::class.javaObjectType)) {

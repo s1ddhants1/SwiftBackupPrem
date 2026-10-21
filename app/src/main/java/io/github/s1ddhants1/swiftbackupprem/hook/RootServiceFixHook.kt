@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
@@ -20,7 +19,7 @@ import java.lang.reflect.Proxy
 object RootServiceFixHook : HookHandler {
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -69,7 +68,7 @@ object RootServiceFixHook : HookHandler {
     }
 
     private fun hookRootServiceManager(
-        module: XposedModule,
+        module: HookContext,
         targetManagerClass: Class<*>?,
         classLoader: ClassLoader,
         originPath: String,
@@ -208,7 +207,7 @@ object RootServiceFixHook : HookHandler {
         return wrapped
     }
 
-    private fun hookGetPackageCodePath(module: XposedModule, originPath: String) {
+    private fun hookGetPackageCodePath(module: HookContext, originPath: String) {
         val contextWrapperClass = android.content.ContextWrapper::class.java
 
         attempt("hook ContextWrapper.getPackageCodePath", silent = true) {

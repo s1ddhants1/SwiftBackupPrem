@@ -6,7 +6,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.annotation.Keep
 import androidx.core.net.toUri
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
@@ -23,7 +22,7 @@ object GoogleDriveScopeHook : HookHandler {
     private var preferences: PreferencesManager? = null
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -49,7 +48,7 @@ object GoogleDriveScopeHook : HookHandler {
         return p.customFirebaseApp && p.enableGoogleDriveScope
     }
 
-    private fun hookOAuthHelper(module: XposedModule, clazz: Class<*>?) {
+    private fun hookOAuthHelper(module: HookContext, clazz: Class<*>?) {
         if (clazz == null) return
         attempt("hook OAuthHelper constructors (${clazz.name})") {
             for (ctor in clazz.declaredConstructors) {
@@ -84,7 +83,7 @@ object GoogleDriveScopeHook : HookHandler {
         }
     }
 
-    private fun hookAuthRequestBuilder(module: XposedModule, clazz: Class<*>?) {
+    private fun hookAuthRequestBuilder(module: HookContext, clazz: Class<*>?) {
         if (clazz == null) return
         attempt("hook AuthRequestBuilder methods (${clazz.name})") {
             for (m in clazz.declaredMethods) {
@@ -115,7 +114,7 @@ object GoogleDriveScopeHook : HookHandler {
         }
     }
 
-    private fun hookUriBuilder(module: XposedModule) {
+    private fun hookUriBuilder(module: HookContext) {
         attempt("hook Uri.Builder.appendQueryParameter") {
             val m = Uri.Builder::class.java.getDeclaredMethod("appendQueryParameter", String::class.java, String::class.java)
             module.hookTracked(
@@ -137,7 +136,7 @@ object GoogleDriveScopeHook : HookHandler {
         }
     }
 
-    private fun hookActivityStart(module: XposedModule, cl: ClassLoader) {
+    private fun hookActivityStart(module: HookContext, cl: ClassLoader) {
         attempt("hook NoGmsSignInActivity.startActivityForResult", silent = true) {
             val activityClass = cl.loadClass("org.swiftapps.swiftbackup.cloud.connect.NoGmsSignInActivity")
             for (m in activityClass.declaredMethods) {
@@ -157,7 +156,7 @@ object GoogleDriveScopeHook : HookHandler {
         }
     }
 
-    private fun hookIntentSetData(module: XposedModule) {
+    private fun hookIntentSetData(module: HookContext) {
         attempt("hook Intent.setData / setDataAndNormalize") {
             for (methodName in listOf("setData", "setDataAndNormalize")) {
                 val m = Intent::class.java.getDeclaredMethod(methodName, Uri::class.java)
@@ -195,7 +194,7 @@ object GoogleDriveScopeHook : HookHandler {
         return uriStr.toUri()
     }
 
-    private fun hookGmsScope(module: XposedModule, cl: ClassLoader) {
+    private fun hookGmsScope(module: HookContext, cl: ClassLoader) {
         attempt("hook GMS Scope class fallback", silent = true) {
             val scopeClass = cl.loadClass("com.google.android.gms.common.api.Scope")
             for (ctor in scopeClass.declaredConstructors) {

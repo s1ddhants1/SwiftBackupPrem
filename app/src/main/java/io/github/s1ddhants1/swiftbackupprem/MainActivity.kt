@@ -82,34 +82,12 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.requestServicePush(this@MainActivity)
-                App.serviceState.collect { service ->
-                    val evaluation = io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.evaluateFrameworkStatus(this@MainActivity, service)
-                    viewModel.updateFrameworkEvaluation(evaluation)
-                    if (service != null && !evaluation.isIntegrated) {
-                        attempt("retrieve remote preferences from XposedService") {
-                            val remotePrefs = service.getRemotePreferences(Consts.PREFS_SETTINGS)
-                            val remoteMgr = PreferencesManager(remotePrefs, backupPrefs = localPrefs)
-                            val localMgr = PreferencesManager(localPrefs)
-                            if (remotePrefs.all.isEmpty()) {
-                                if (localPrefs.all.isEmpty()) {
-                                    localMgr.loadFromFallbackStorage(this@MainActivity)
-                                }
-                                remoteMgr.applyConfig(localMgr.toConfig())
-                            } else {
-                                localMgr.applyConfig(remoteMgr.toConfig())
-                            }
-                            remoteMgr.onPreferenceChanged = { remoteMgr.saveToFallbackStorageAsync(this@MainActivity) }
-                            remoteMgr.saveToFallbackStorageAsync(this@MainActivity)
-                            prefsState.value = remoteMgr
+                FrameworkHelper.evaluation.collect { evaluation ->
+                    if (evaluation != null) {
+                        viewModel.updateFrameworkEvaluation(evaluation)
+                        FrameworkHelper.syncPreferences(this@MainActivity, localPrefs) { mgr ->
+                            prefsState.value = mgr
                         }
-                    } else {
-                        val fallbackMgr = PreferencesManager(localPrefs).apply {
-                            if (localPrefs.all.isEmpty()) {
-                                loadFromFallbackStorage(this@MainActivity)
-                            }
-                            onPreferenceChanged = { saveToFallbackStorageAsync(this@MainActivity) }
-                        }
-                        prefsState.value = fallbackMgr
                     }
                 }
             }
@@ -121,7 +99,7 @@ class MainActivity : ComponentActivity() {
             }
 
             androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
-                val evaluation = io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper.evaluateFrameworkStatus(this@MainActivity, App.serviceState.value)
+                val evaluation = FrameworkHelper.refreshEvaluation(this@MainActivity)
                 viewModel.updateFrameworkEvaluation(evaluation)
                 onPauseOrDispose {}
             }

@@ -6,7 +6,6 @@ import android.content.SharedPreferences
 import android.os.Environment
 import android.util.Log
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.hook.cloudproviders.CloudFileItem
 import io.github.s1ddhants1.swiftbackupprem.hook.cloudproviders.CloudScannerRegistry
@@ -754,7 +753,7 @@ object CloudDiscoveryHook : HookHandler {
     }
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -1055,7 +1054,7 @@ object CloudDiscoveryHook : HookHandler {
     }
 
     private fun hookAppCloudBackups(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets

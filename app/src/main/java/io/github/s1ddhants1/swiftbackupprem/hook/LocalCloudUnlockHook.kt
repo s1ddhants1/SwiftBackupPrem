@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.AppUtils
 import io.github.s1ddhants1.swiftbackupprem.util.BackupCrypto
@@ -124,7 +123,7 @@ object LocalCloudUnlockHook : HookHandler {
     private val bgExecutor by lazy { Executors.newSingleThreadExecutor { Thread(it, "SBP-LocalCloudSync").apply { isDaemon = true } } }
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -140,7 +139,7 @@ object LocalCloudUnlockHook : HookHandler {
     }
 
     fun hookGetUid(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
         prefs: PreferencesManager,
@@ -250,7 +249,7 @@ object LocalCloudUnlockHook : HookHandler {
     }
 
     fun hookIsAnonymous(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
         prefs: PreferencesManager,
@@ -302,7 +301,7 @@ object LocalCloudUnlockHook : HookHandler {
     }
 
     fun hookFirebaseWatcher(
-        module: XposedModule,
+        module: HookContext,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
         prefs: PreferencesManager,
@@ -357,7 +356,7 @@ object LocalCloudUnlockHook : HookHandler {
     }
 
     fun hookFireSynchronizer(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -614,7 +613,7 @@ object LocalCloudUnlockHook : HookHandler {
         }
 
     fun hookDatabaseReferenceWrites(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -816,7 +815,7 @@ object LocalCloudUnlockHook : HookHandler {
         } catch (_: Throwable) { null }
 
     fun hookQueryListeners(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,

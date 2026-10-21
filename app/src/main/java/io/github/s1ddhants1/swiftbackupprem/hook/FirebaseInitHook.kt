@@ -3,7 +3,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
@@ -13,7 +12,7 @@ import java.lang.reflect.Modifier
 object FirebaseInitHook : HookHandler {
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -44,7 +43,7 @@ object FirebaseInitHook : HookHandler {
                 module.hookTracked(
                     swiftAppClass.getDeclaredMethod("getGoogleAuthAndroidClientId"),
                     idPrefix = "firebase-init-clientid",
-                    priority = io.github.libxposed.api.XposedInterface.PRIORITY_DEFAULT + 10,
+                    priority = PRIORITY_DEFAULT + 10,
                     deoptimize = true
                 ).intercept { prefs.clientId }
             }

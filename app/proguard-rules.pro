@@ -14,6 +14,16 @@
     public void on*(...);
 }
 
+# Legacy Xposed API rules
+-dontwarn de.robv.android.xposed.**
+-keep class * implements de.robv.android.xposed.IXposedHookLoadPackage { *; }
+-keep class * implements de.robv.android.xposed.IXposedHookZygoteInit { *; }
+-keep class * implements de.robv.android.xposed.IXposedHookInitPackageResources { *; }
+-adaptresourcefilecontents assets/xposed_init
+-keepclassmembers class io.github.s1ddhants1.swiftbackupprem.App { public static boolean isModuleActive(); }
+-keep class io.github.s1ddhants1.swiftbackupprem.FrameworkHelper { *; }
+-keepclassmembers class io.github.s1ddhants1.swiftbackupprem.FrameworkHelper { *; }
+
 # Keep XposedProvider for LSPosed Framework Service IPC
 -keep class io.github.libxposed.service.XposedProvider { *; }
 

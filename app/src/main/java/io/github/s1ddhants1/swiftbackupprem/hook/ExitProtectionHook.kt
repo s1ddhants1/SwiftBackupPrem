@@ -3,7 +3,6 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 import android.content.Context
 import android.util.Log
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
@@ -19,7 +18,7 @@ object ExitProtectionHook : HookHandler {
     }
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -28,18 +27,18 @@ object ExitProtectionHook : HookHandler {
         neutralizeSystemExit(module)
     }
 
-    fun applyEarly(module: XposedModule, classLoader: ClassLoader) {
+    fun applyEarly(module: HookContext, classLoader: ClassLoader) {
         neutralizeSystemExit(module)
     }
 
-    private fun neutralizeSystemExit(module: XposedModule) {
+    private fun neutralizeSystemExit(module: HookContext) {
         if (!hooked.compareAndSet(false, true)) return
         attempt("neutralize System.exit", silent = true) {
             val m = System::class.java.getDeclaredMethod("exit", Int::class.javaPrimitiveType)
             module.hookTracked(
                 m,
                 idPrefix = "exit-system-exit",
-                priority = io.github.libxposed.api.XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
                 val code = chain.getArg(0)
@@ -52,7 +51,7 @@ object ExitProtectionHook : HookHandler {
             module.hookTracked(
                 m,
                 idPrefix = "exit-runtime-exit",
-                priority = io.github.libxposed.api.XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
                 val code = chain.getArg(0)
@@ -62,5 +61,3 @@ object ExitProtectionHook : HookHandler {
         }
     }
 }
-
-

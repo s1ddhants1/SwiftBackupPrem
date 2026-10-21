@@ -95,6 +95,16 @@ android {
         localeFilters += listOf("en")
     }
 
+    flavorDimensions += "framework"
+    productFlavors {
+        create("normal") {
+            dimension = "framework"
+        }
+        create("legacy") {
+            dimension = "framework"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -157,15 +167,20 @@ android {
 androidComponents {
     onVariants(selector().all()) { variant ->
         variant.outputs.forEach { output ->
-            output.outputFileName.set("SwiftBackupPrem_${appVersionName}-${variant.name}.apk")
+            val flavorName = variant.flavorName.orEmpty()
+            val suffix = if (flavorName == "legacy") "-legacy" else ""
+            output.outputFileName.set("SwiftBackupPrem_${appVersionName}${suffix}-${variant.buildType}.apk")
         }
     }
 }
 
 dependencies {
-    compileOnly(libs.libxposed.api)
+    "normalCompileOnly"(libs.libxposed.api)
+    "normalImplementation"(libs.libxposed.service)
+
+    "legacyCompileOnly"(files("libs/api-82.jar"))
+
     compileOnly(libs.androidx.preference)
-    implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     implementation(libs.kotlinx.serialization.json)
 
@@ -178,7 +193,5 @@ dependencies {
     implementation(libs.bundles.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    testImplementation(libs.libxposed.api)
-    testImplementation(libs.libxposed.service)
     testImplementation(libs.bundles.unit.test)
 }

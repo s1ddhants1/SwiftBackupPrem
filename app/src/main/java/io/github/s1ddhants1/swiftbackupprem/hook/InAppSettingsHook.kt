@@ -9,8 +9,6 @@ import android.util.AttributeSet
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.Keep
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedModule
 import io.github.s1ddhants1.swiftbackupprem.BuildConfig
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.GoogleServicesJson
@@ -126,7 +124,7 @@ object InAppSettingsHook : HookHandler {
     }
 
     override fun apply(
-        module: XposedModule,
+        module: HookContext,
         context: Context,
         classLoader: ClassLoader,
         targets: ResolvedTargets,
@@ -161,7 +159,7 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 lMethod,
                 idPrefix = "sbp-settings-sfc-create",
-                priority = XposedInterface.PRIORITY_DEFAULT,
+                priority = PRIORITY_DEFAULT,
                 deoptimize = true
             ).intercept { chain ->
                 val result = chain.proceed()
@@ -189,13 +187,13 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 dMethod,
                 idPrefix = "sbp-settings-sfc-click",
-                priority = XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
-                val pref = chain.args[0]
+                val pref = chain.args.getOrNull(0) ?: return@intercept chain.proceed()
                 val key = helper.getKey(pref)
                 if (key == PREF_KEY_SBP) {
-                    val fragment = chain.thisObject
+                    val fragment = chain.thisObject ?: return@intercept chain.proceed()
                     val act = attempt("get act", silent = true) {
                         fragment.javaClass.getMethod("getActivity").invoke(fragment) as? Activity
                     } ?: (fragment.javaClass.getMethod("requireContext").invoke(fragment) as Context)
@@ -219,7 +217,7 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 lMethod,
                 idPrefix = "sbp-settings-detail-create",
-                priority = XposedInterface.PRIORITY_DEFAULT,
+                priority = PRIORITY_DEFAULT,
                 deoptimize = true
             ).intercept { chain ->
                 val result = chain.proceed()
@@ -260,18 +258,20 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 dMethod,
                 idPrefix = "sbp-settings-detail-click",
-                priority = XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
                 val fragment = chain.thisObject
-                val activity = fragment.javaClass.getMethod("getActivity").invoke(fragment) as? Activity
+                val activity = fragment?.javaClass?.getMethod("getActivity")?.invoke(fragment) as? Activity
                 val category = activity?.intent?.getIntExtra("category", 0) ?: 0
                 if (activity != null && category == SBP_CATEGORY_ID) {
                     activeFragment = fragment
-                    val pref = chain.args[0]
-                    val key = helper.getKey(pref)
-                    val handled = handleSbpClick(pref, key, activity, helper, fragment)
-                    if (handled) return@intercept true
+                    val pref = chain.args.getOrNull(0)
+                    if (pref != null) {
+                        val key = helper.getKey(pref)
+                        val handled = handleSbpClick(pref, key, activity, helper, fragment)
+                        if (handled) return@intercept true
+                    }
                 }
                 chain.proceed()
             }
@@ -284,20 +284,22 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 cMethod,
                 idPrefix = "sbp-settings-detail-change",
-                priority = XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
                 val fragment = chain.thisObject
-                val activity = fragment.javaClass.getMethod("getActivity").invoke(fragment) as? Activity
+                val activity = fragment?.javaClass?.getMethod("getActivity")?.invoke(fragment) as? Activity
                 val category = activity?.intent?.getIntExtra("category", 0) ?: 0
                 if (activity != null && category == SBP_CATEGORY_ID) {
                     activeFragment = fragment
-                    val pref = chain.args[0]
-                    val key = helper.getKey(pref)
-                    val newValue = chain.args[1] as? Boolean
-                    if (key != null && newValue != null) {
-                        handleTogglePreference(pref, key, newValue, activity, helper, fragment)
-                        return@intercept true
+                    val pref = chain.args.getOrNull(0)
+                    if (pref != null) {
+                        val key = helper.getKey(pref)
+                        val newValue = chain.args.getOrNull(1) as? Boolean
+                        if (key != null && newValue != null) {
+                            handleTogglePreference(pref, key, newValue, activity, helper, fragment)
+                            return@intercept true
+                        }
                     }
                 }
                 chain.proceed()
@@ -311,7 +313,7 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 onViewCreatedMethod,
                 idPrefix = "sbp-baseFragment-onViewCreated",
-                priority = XposedInterface.PRIORITY_DEFAULT,
+                priority = PRIORITY_DEFAULT,
                 deoptimize = true
             ).intercept { chain ->
                 val result = chain.proceed()
@@ -340,7 +342,7 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 onLayoutMethod,
                 idPrefix = "sbp-rv-onLayout-safe",
-                priority = XposedInterface.PRIORITY_HIGHEST,
+                priority = PRIORITY_HIGHEST,
                 deoptimize = true
             ).intercept { chain ->
                 try {
@@ -360,7 +362,7 @@ object InAppSettingsHook : HookHandler {
             module.hookTracked(
                 setAdapterMethod,
                 idPrefix = "sbp-rv-setAdapter",
-                priority = XposedInterface.PRIORITY_DEFAULT,
+                priority = PRIORITY_DEFAULT,
                 deoptimize = true
             ).intercept { chain ->
                 val rv = chain.thisObject
@@ -405,7 +407,7 @@ object InAppSettingsHook : HookHandler {
                     module.hookTracked(
                         m,
                         idPrefix = "sbp-on-result-${cls.simpleName}",
-                        priority = XposedInterface.PRIORITY_HIGHEST,
+                        priority = PRIORITY_HIGHEST,
                         deoptimize = true
                     ).intercept { chain ->
                         val reqCode = chain.args[0] as? Int ?: 0

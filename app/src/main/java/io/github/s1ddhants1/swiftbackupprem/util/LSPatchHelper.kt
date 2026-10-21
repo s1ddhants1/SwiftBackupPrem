@@ -10,7 +10,6 @@ import io.github.s1ddhants1.swiftbackupprem.Consts
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Base64
-import io.github.libxposed.service.XposedService
 import io.github.s1ddhants1.swiftbackupprem.R
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
@@ -24,7 +23,7 @@ object LSPatchHelper {
     private var lastRequestTime = 0L
 
     fun requestServicePush(context: Context) {
-        val currentFramework = io.github.s1ddhants1.swiftbackupprem.App.serviceState.value?.frameworkName.orEmpty()
+        val currentFramework = io.github.s1ddhants1.swiftbackupprem.FrameworkHelper.frameworkName
         if (currentFramework.isNotEmpty() && !currentFramework.contains("LSPatch", ignoreCase = true)) {
             Log.d(Consts.TAG, "Active non-LSPatch framework detected ($currentFramework); skipping LSPatch push request")
             return
@@ -296,22 +295,78 @@ object LSPatchHelper {
 
     fun evaluateFrameworkStatus(
         context: Context,
-        service: XposedService?
+        frameworkName: String?,
+        frameworkVersion: String?,
+        scope: List<String>?,
+        isServiceBound: Boolean
     ): BannerEvaluation = evaluateFrameworkStatus(
-        service = service,
+        frameworkName = frameworkName,
+        frameworkVersion = frameworkVersion,
+        scope = scope,
+        isServiceBound = isServiceBound,
         targetStatus = inspectTargetApp(context)
     )
 
     fun evaluateFrameworkStatus(
-        service: XposedService?,
-        targetStatus: TargetStatus
+        context: Context,
+        isModuleActive: Boolean = io.github.s1ddhants1.swiftbackupprem.App.isModuleActive()
     ): BannerEvaluation = evaluateFrameworkStatus(
-        frameworkName = attempt("get frameworkName", silent = true) { service?.frameworkName },
-        frameworkVersion = attempt("get frameworkVersion", silent = true) { service?.frameworkVersion },
-        scope = attempt("get service scope", silent = true) { service?.scope },
-        isServiceBound = service != null,
-        targetStatus = targetStatus
+        isModuleActive = isModuleActive,
+        targetStatus = inspectTargetApp(context)
     )
+
+    fun evaluateFrameworkStatus(
+        isModuleActive: Boolean,
+        targetStatus: TargetStatus
+    ): BannerEvaluation {
+        if (targetStatus.isInstalled && targetStatus.isPatched && (targetStatus.isModuleEmbedded || targetStatus.useManager == false)) {
+            return BannerEvaluation(
+                isConnected = true,
+                isInjectable = true,
+                frameworkName = "LSPatch",
+                frameworkVersion = "(Embedded)",
+                titleRes = R.string.framework_lspatch_embedded_active_title,
+                descRes = R.string.framework_lspatch_embedded_active_desc,
+                isIntegrated = true
+            )
+        }
+
+        if (isModuleActive) {
+            return BannerEvaluation(
+                isConnected = true,
+                isInjectable = true,
+                frameworkName = "Xposed",
+                frameworkVersion = "(Legacy)",
+                titleRes = R.string.framework_active_title_dynamic,
+                titleArgs = listOf("Xposed"),
+                descRes = R.string.framework_active_desc,
+                descArgs = listOf("Xposed", "(Legacy)"),
+                isIntegrated = false
+            )
+        }
+
+        if (!targetStatus.isInstalled) {
+            return BannerEvaluation(
+                isConnected = false,
+                isInjectable = false,
+                frameworkName = "",
+                frameworkVersion = "",
+                titleRes = R.string.framework_sb_not_installed_title,
+                descRes = R.string.framework_sb_not_installed_desc,
+                isIntegrated = false
+            )
+        }
+
+        return BannerEvaluation(
+            isConnected = false,
+            isInjectable = false,
+            frameworkName = "",
+            frameworkVersion = "",
+            titleRes = R.string.framework_inactive_title,
+            descRes = R.string.framework_inactive_desc,
+            isIntegrated = false
+        )
+    }
 
     fun evaluateFrameworkStatus(
         frameworkName: String?,
