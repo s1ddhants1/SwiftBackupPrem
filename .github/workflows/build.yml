@@ -1,0 +1,201 @@
+name: Build APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "README.md"
+      - "assets/**"
+      - ".github/**/*.md"
+      - "docs/**"
+      - "Screenshots/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_release:
+    name: Build Release APK
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-cleanup: on-success
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE }}" ]; then
+            echo "[*] Configuring production signing keystore..."
+            {
+              echo KEYSTORE_PASSWORD='${{ secrets.KEYSTORE_PASSWORD }}'
+              echo KEY_ALIAS='${{ secrets.KEY_ALIAS }}'
+              echo KEY_PASSWORD='${{ secrets.KEY_PASSWORD }}'
+              echo KEYSTORE_FILE="$GITHUB_WORKSPACE/key.jks"
+            } >> gradle.properties
+            echo "${{ secrets.KEYSTORE }}" | base64 -d > key.jks
+          else
+            echo "[*] Generating fallback signing keystore..."
+            keytool -genkeypair -v \
+              -keystore "$GITHUB_WORKSPACE/key.jks" \
+              -storepass android \
+              -alias swiftbackupprem \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=SwiftBackupPrem Nightly,O=SwiftBackupPrem,C=US"
+            {
+              echo KEYSTORE_PASSWORD='android'
+              echo KEY_ALIAS='swiftbackupprem'
+              echo KEY_PASSWORD='android'
+              echo KEYSTORE_FILE="$GITHUB_WORKSPACE/key.jks"
+            } >> gradle.properties
+          fi
+
+      - name: Build Release APKs
+        run: ./gradlew --console=plain assembleAllRelease --warning-mode summary
+
+      - name: Prepare Release APKs
+        run: |
+          OUTPUT_DIR="app/build/outputs/apk/release"
+          mkdir -p "$OUTPUT_DIR/out"
+
+          NORMAL_APK=$(find "$OUTPUT_DIR" -maxdepth 1 -name "*.apk" ! -name "*legacy*" | head -n 1)
+          LEGACY_APK=$(find "$OUTPUT_DIR" -maxdepth 1 -name "*legacy*.apk" | head -n 1)
+
+          if [ -n "$NORMAL_APK" ] && [ -f "$NORMAL_APK" ]; then
+            cp "$NORMAL_APK" "$OUTPUT_DIR/out/SwiftBackupPrem-Nightly.apk"
+          else
+            echo "::error::Normal release APK not found in $OUTPUT_DIR"
+            exit 1
+          fi
+
+          if [ -n "$LEGACY_APK" ] && [ -f "$LEGACY_APK" ]; then
+            cp "$LEGACY_APK" "$OUTPUT_DIR/out/SwiftBackupPrem-Legacy-Nightly.apk"
+          else
+            echo "::error::Legacy release APK not found in $OUTPUT_DIR"
+            exit 1
+          fi
+
+          ls -la "$OUTPUT_DIR/out/"
+
+      - name: Verify APK Signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          echo "Verifying APK signatures using $APKSIGNER"
+          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/out/SwiftBackupPrem-Nightly.apk
+          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/out/SwiftBackupPrem-Legacy-Nightly.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: swiftbackupprem-release
+          path: app/build/outputs/apk/release/out/*
+
+  build_debug:
+    name: Build Debug APK
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-cleanup: on-success
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew --console=plain assembleAllDebug --warning-mode summary
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: swiftbackupprem-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+  publish_nightly:
+    name: Publish Nightly Release
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [build_release, build_debug]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download Release APK
+        uses: actions/download-artifact@v8
+        with:
+          name: swiftbackupprem-release
+          path: nightly
+
+      - name: Publish Nightly Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PREVIOUS_NIGHTLY_SHA=$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
+          {
+            echo "Automated prerelease built from main at commit $GITHUB_SHA. It may be unstable."
+            if [ -n "$PREVIOUS_NIGHTLY_SHA" ] && [ "$PREVIOUS_NIGHTLY_SHA" != "$GITHUB_SHA" ]; then
+              echo
+              echo "## Changes since previous nightly"
+              gh api "repos/$GITHUB_REPOSITORY/compare/$PREVIOUS_NIGHTLY_SHA...$GITHUB_SHA" \
+                --jq '.commits[] | "* \(.commit.message | split("\n")[0]) (\(.sha[0:7]))"' 2>/dev/null || true
+            fi
+          } > nightly-notes.md
+
+          if gh release view nightly > /dev/null 2>&1; then
+            gh release delete nightly --yes --cleanup-tag
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/nightly" > /dev/null 2>&1; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/nightly" > /dev/null 2>&1 || true
+          fi
+
+          gh release create nightly \
+            nightly/SwiftBackupPrem-Nightly.apk \
+            nightly/SwiftBackupPrem-Legacy-Nightly.apk \
+            --target "$GITHUB_SHA" \
+            --title "SwiftBackupPrem Nightly" \
+            --notes-file nightly-notes.md \
+            --generate-notes \
+            --prerelease \
+            --latest=false
