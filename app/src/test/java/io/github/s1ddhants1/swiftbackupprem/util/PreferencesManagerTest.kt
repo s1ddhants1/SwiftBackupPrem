@@ -287,6 +287,18 @@ class PreferencesManagerTest {
         assertTrue(prefs.unlockLocalCloudFeatures)
     }
 
+    @Test
+    fun requestForceStopWritesTimestampToPreferences() {
+        val primary = FakeSharedPreferences()
+        val backup = FakeSharedPreferences()
+        val prefs = PreferencesManager(primary, backupPrefs = backup)
+
+        prefs.requestForceStop()
+
+        assertTrue(primary.getLong(io.github.s1ddhants1.swiftbackupprem.Consts.keyForceStop, 0L) > 0L)
+        assertTrue(backup.getLong(io.github.s1ddhants1.swiftbackupprem.Consts.keyForceStop, 0L) > 0L)
+    }
+
     private class FakeSharedPreferences : android.content.SharedPreferences {
         val map = mutableMapOf<String, Any?>()
 

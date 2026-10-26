@@ -1,6 +1,15 @@
 package io.github.s1ddhants1.swiftbackupprem
 
+import android.app.Activity
+import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.Keep
 import de.robv.android.xposed.IXposedHookLoadPackage
@@ -16,9 +25,37 @@ import io.github.s1ddhants1.swiftbackupprem.util.attempt
 import java.lang.reflect.Constructor
 import java.lang.reflect.Executable
 import java.lang.reflect.Member
+import java.util.Collections
+import java.util.WeakHashMap
 
 @Keep
 class Module : IXposedHookLoadPackage, HookContext {
+    private val activeActivities = Collections.newSetFromMap(WeakHashMap<Activity, Boolean>())
+
+    private val forceStopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Consts.actionForceStop) {
+                terminateTargetProcess()
+            }
+        }
+    }
+
+    private fun terminateTargetProcess() {
+        attempt("terminate target process") {
+            val mainLooper = Looper.getMainLooper()
+            if (Looper.myLooper() == mainLooper) {
+                activeActivities.forEach { attempt("finish activity", silent = true) { it.finishAndRemoveTask() } }
+                activeActivities.clear()
+            } else {
+                Handler(mainLooper).post {
+                    activeActivities.forEach { attempt("finish activity", silent = true) { it.finishAndRemoveTask() } }
+                    activeActivities.clear()
+                }
+                Thread.sleep(50)
+            }
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName == BuildConfig.APPLICATION_ID) {
@@ -90,6 +127,32 @@ class Module : IXposedHookLoadPackage, HookContext {
         val isIntegrated = LSPatchHelper.isIntegratedMode(ctx, remotePrefsAvailable = hasPrefs)
         if (isIntegrated || !hasPrefs) {
             prefs.loadFromFallbackStorage(ctx)
+        }
+
+        val app = ctx.applicationContext as? Application ?: ctx as? Application
+        app?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                activeActivities.add(activity)
+            }
+
+            override fun onActivityDestroyed(activity: Activity) {
+                activeActivities.remove(activity)
+            }
+
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+        })
+
+        attempt("register force stop receiver", silent = true) {
+            val filter = IntentFilter(Consts.actionForceStop)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ctx.registerReceiver(forceStopReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                ctx.registerReceiver(forceStopReceiver, filter)
+            }
         }
 
         var targets = ResolvedTargets()

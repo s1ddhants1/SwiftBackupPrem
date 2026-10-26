@@ -20,6 +20,8 @@ object FrameworkHelper {
 
     fun isModuleActive(): Boolean = App.isModuleActive()
 
+    fun isTargetRunning(packageName: String = Consts.packageName): Boolean? = null
+
     fun refreshEvaluation(context: Context): BannerEvaluation {
         val eval = LSPatchHelper.evaluateFrameworkStatus(
             context = context,

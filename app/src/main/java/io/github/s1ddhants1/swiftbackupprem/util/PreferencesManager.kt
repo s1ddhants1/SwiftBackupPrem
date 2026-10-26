@@ -62,6 +62,14 @@ class PreferencesManager(
             }
         }
 
+    fun requestForceStop() {
+        attempt("save preference force stop", silent = true) {
+            val now = System.currentTimeMillis()
+            prefs?.edit { putLong(Consts.keyForceStop, now) }
+            backupPrefs?.edit { putLong(Consts.keyForceStop, now) }
+        }
+    }
+
     private fun putString(key: String, value: String?) {
         attempt("save preference string $key", silent = true) {
             val now = System.currentTimeMillis()

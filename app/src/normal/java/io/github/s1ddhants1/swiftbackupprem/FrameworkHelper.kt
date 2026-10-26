@@ -43,6 +43,13 @@ object FrameworkHelper {
 
     fun isModuleActive(): Boolean = currentService != null
 
+    fun isTargetRunning(packageName: String = Consts.packageName): Boolean? {
+        val service = currentService ?: return null
+        return attempt("check running targets", silent = true) {
+            service.runningTargets.any { it.processName == packageName }
+        }
+    }
+
     fun refreshEvaluation(context: Context): BannerEvaluation {
         val service = currentService
         val eval = LSPatchHelper.evaluateFrameworkStatus(

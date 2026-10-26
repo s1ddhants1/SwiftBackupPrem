@@ -1,7 +1,16 @@
 package io.github.s1ddhants1.swiftbackupprem
 
+import android.app.Activity
+import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.Keep
 import io.github.libxposed.api.XposedInterface
@@ -13,11 +22,45 @@ import io.github.s1ddhants1.swiftbackupprem.util.LSPatchHelper
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
 import java.lang.reflect.Executable
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 @Keep
 class Module : XposedModule(), HookContext {
     private val hookHandles = ConcurrentHashMap<String, XposedInterface.HookHandle>()
+    private val activeActivities = Collections.newSetFromMap(WeakHashMap<Activity, Boolean>())
+
+    private val forceStopListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == Consts.keyForceStop) {
+            terminateTargetProcess()
+        }
+    }
+
+    private val forceStopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Consts.actionForceStop) {
+                terminateTargetProcess()
+            }
+        }
+    }
+
+    private fun terminateTargetProcess() {
+        attempt("terminate target process") {
+            val mainLooper = Looper.getMainLooper()
+            if (Looper.myLooper() == mainLooper) {
+                activeActivities.forEach { attempt("finish activity", silent = true) { it.finishAndRemoveTask() } }
+                activeActivities.clear()
+            } else {
+                Handler(mainLooper).post {
+                    activeActivities.forEach { attempt("finish activity", silent = true) { it.finishAndRemoveTask() } }
+                    activeActivities.clear()
+                }
+                Thread.sleep(50)
+            }
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
 
     fun rememberHook(id: String?, handle: XposedInterface.HookHandle) {
         if (id != null) hookHandles[id] = handle
@@ -130,6 +173,7 @@ class Module : XposedModule(), HookContext {
         CloudDiscoveryHook.shutdown()
         LocalCloudUnlockHook.shutdown()
         ExitProtectionHook.reset()
+        activeActivities.clear()
         hookHandles.clear()
 
         return true
@@ -162,12 +206,39 @@ class Module : XposedModule(), HookContext {
 
     private fun applyHooks(ctx: Context, cl: ClassLoader, sourceDir: String, swiftAppInstance: Any? = null): Pair<ResolvedTargets, PreferencesManager>? {
         val remotePrefs = attempt("get remote preferences") { getRemotePreferences(Consts.PREFS_SETTINGS) }
+        remotePrefs?.registerOnSharedPreferenceChangeListener(forceStopListener)
         val hasRemotePrefs = remotePrefs != null && remotePrefs.all.isNotEmpty()
         val isIntegrated = LSPatchHelper.isIntegratedMode(ctx, remotePrefsAvailable = hasRemotePrefs)
         Log.i(Consts.TAG, "applyHooks: isIntegrated=$isIntegrated, hasRemotePrefs=$hasRemotePrefs")
         val prefs = PreferencesManager(remotePrefs, isDynamic = true)
         if (isIntegrated || remotePrefs == null || remotePrefs.all.isEmpty()) {
             prefs.loadFromFallbackStorage(ctx)
+        }
+
+        val app = ctx.applicationContext as? Application ?: ctx as? Application
+        app?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                activeActivities.add(activity)
+            }
+
+            override fun onActivityDestroyed(activity: Activity) {
+                activeActivities.remove(activity)
+            }
+
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+        })
+
+        attempt("register force stop receiver", silent = true) {
+            val filter = IntentFilter(Consts.actionForceStop)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ctx.registerReceiver(forceStopReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                ctx.registerReceiver(forceStopReceiver, filter)
+            }
         }
 
         var targets = ResolvedTargets()
