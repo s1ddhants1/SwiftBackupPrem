@@ -164,5 +164,18 @@ class DexKitVersionMapTest {
         assertEquals("defpackage.uk7", v634.settingsFragment)
         assertEquals("org.swiftapps.swiftbackup.settings.a", v634.settingsDetailFragment)
         assertEquals("defpackage.io0", v634.baseSettingsFragment)
+
+        val v635 = versionMap[635]
+        assertNotNull(v635)
+        assertEquals("defpackage.tv5", v635!!.clientId)
+        assertEquals("defpackage.xc4", v635.homeViewModel)
+        assertEquals("defpackage.kb5", v635.authUser)
+        assertEquals("defpackage.hb5", v635.anonUser)
+        assertEquals("defpackage.mm3", v635.firebaseWatcher)
+        assertEquals("defpackage.kl3", v635.fireSynchronizer)
+        assertEquals("defpackage.al3", v635.fireSynchronizerSuccess)
+        assertEquals("defpackage.nl7", v635.settingsFragment)
+        assertEquals("org.swiftapps.swiftbackup.settings.a", v635.settingsDetailFragment)
+        assertEquals("defpackage.io0", v635.baseSettingsFragment)
     }
 }
