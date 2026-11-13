@@ -9,6 +9,7 @@ import androidx.core.net.toUri
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
 import io.github.s1ddhants1.swiftbackupprem.util.attempt
+import org.json.JSONObject
 
 @Keep
 object GoogleDriveScopeHook : HookHandler {
@@ -29,6 +30,7 @@ object GoogleDriveScopeHook : HookHandler {
         prefs: PreferencesManager
     ) {
         preferences = prefs
+        hookTokenProvider(module, targets.cloudGmsClass, context)
         if (!prefs.customFirebaseApp || !prefs.enableGoogleDriveScope) {
             Log.d(Consts.TAG, "Google Drive scope upgrade is disabled (requires custom Firebase app and Google Drive OAuth expansion)")
             return
@@ -212,5 +214,95 @@ object GoogleDriveScopeHook : HookHandler {
                 }
             }
         }
+    }
+
+    private fun hookTokenProvider(module: HookContext, clazz: Class<*>?, context: Context) {
+        if (clazz == null) return
+        val method = clazz.declaredMethods.firstOrNull { it.name == "invoke" && it.parameterCount == 0 } ?: return
+        attempt("hook Google Drive token provider (${clazz.name})") {
+            module.hookTracked(
+                method,
+                idPrefix = "drive-token-provider",
+                deoptimize = true
+            ).intercept { chain ->
+                val target = chain.thisObject
+                val isDriveLambda = target != null && isGoogleDriveReceiver(target)
+                if (!isDriveLambda) {
+                    return@intercept chain.proceed()
+                }
+
+                val original = chain.proceed()
+                if (original is String && original.isNotBlank()) {
+                    return@intercept original
+                }
+
+                val receiver = getLambdaReceiver(target)
+                if (receiver != null) {
+                    for (f in receiver.javaClass.declaredFields) {
+                        try {
+                            f.isAccessible = true
+                            val v = f.get(receiver)
+                            if (v is String && (v.startsWith("ya29.") || (v.length > 20 && !v.contains(" ") && !v.contains("{")))) {
+                                return@intercept v
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                }
+
+                val defaultPrefs = attempt("get default prefs for token fallback", silent = true) {
+                    context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
+                }
+                if (defaultPrefs != null) {
+                    val noGmsToken = defaultPrefs.getString("nogms_access_token", null)
+                    if (!noGmsToken.isNullOrBlank()) {
+                        return@intercept noGmsToken
+                    }
+                    val authStateJson = defaultPrefs.getString("nogms_auth_state", null)
+                    if (!authStateJson.isNullOrBlank()) {
+                        try {
+                            val json = JSONObject(authStateJson)
+                            val lastToken = json.optJSONObject("mLastTokenResponse")
+                            val token = lastToken?.optString("access_token")
+                            if (!token.isNullOrBlank()) {
+                                defaultPrefs.edit().putString("nogms_access_token", token).apply()
+                                return@intercept token
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                }
+
+                original
+            }
+        }
+    }
+
+    private fun getLambdaReceiver(target: Any): Any? {
+        val f = target.javaClass.superclass?.declaredFields?.firstOrNull { it.name == "receiver" }
+            ?: target.javaClass.declaredFields.firstOrNull { it.name == "receiver" }
+            ?: return null
+        return try {
+            f.isAccessible = true
+            f.get(target)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun isGoogleDriveReceiver(target: Any): Boolean {
+        val receiver = getLambdaReceiver(target) ?: return false
+        val rClass = receiver.javaClass
+        if (rClass.name.contains("GClient")) return true
+        val hasDriveEnum = rClass.declaredFields.any { f ->
+            try {
+                f.isAccessible = true
+                val v = f.get(receiver)
+                v != null && v.toString().contains("GoogleDrive")
+            } catch (_: Throwable) {
+                false
+            }
+        }
+        if (hasDriveEnum) return true
+        return rClass.declaredFields.any { it.name == "j" && it.type == String::class.java } &&
+            rClass.declaredFields.any { it.name == "i" }
     }
 }

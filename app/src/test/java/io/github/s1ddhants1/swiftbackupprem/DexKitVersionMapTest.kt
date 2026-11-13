@@ -82,10 +82,14 @@ class DexKitVersionMapTest {
         assertEquals("defpackage.c64", v620.homeViewModel)
         assertEquals("defpackage.d45", v620.authUser)
         assertEquals("defpackage.b45", v620.anonUser)
+        assertEquals("defpackage.in5", v620.oauthHelper)
+        assertEquals("defpackage.uj", v620.authRequestBuilder)
         assertEquals("defpackage.gg3", v620.firebaseWatcher)
         assertEquals("defpackage.pa7", v620.settingsFragment)
         assertEquals("org.swiftapps.swiftbackup.settings.a", v620.settingsDetailFragment)
         assertEquals("defpackage.fm0", v620.baseSettingsFragment)
+        assertEquals("defpackage.bq6", v620.rootServiceManager)
+        assertEquals("defpackage.q02", v620.cloudGms)
 
         val v623 = versionMap[623]
         assertNotNull(v623)
@@ -112,6 +116,8 @@ class DexKitVersionMapTest {
         assertEquals("defpackage.re7", v626.settingsFragment)
         assertEquals("org.swiftapps.swiftbackup.settings.a", v626.settingsDetailFragment)
         assertEquals("defpackage.qm0", v626.baseSettingsFragment)
+        assertEquals("defpackage.at6", v626.rootServiceManager)
+        assertEquals("defpackage.rk", v626.cloudGms)
 
         val v628 = versionMap[628]
         assertNotNull(v628)

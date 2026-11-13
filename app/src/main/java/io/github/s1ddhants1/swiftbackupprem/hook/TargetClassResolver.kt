@@ -63,6 +63,7 @@ object TargetClassResolver {
             settingsDetailFragment = c.settingsDetailFragment?.let { loadClassFlexible(cl, it) }
             baseSettingsFragment = c.baseSettingsFragment?.let { loadClassFlexible(cl, it) }
             rootServiceManager = c.rootServiceManager?.let { loadClassFlexible(cl, it) }
+            cloudGms = c.cloudGms?.let { loadClassFlexible(cl, it) }
         }
 
         val cachePrefs = attempt("get DexKit cache preferences", silent = true) {
@@ -88,6 +89,7 @@ object TargetClassResolver {
             if (settingsDetailFragment == null) settingsDetailFragment = cachePrefs.getString("settingsDetailFragment", null)?.let { loadClassFlexible(cl, it) }
             if (baseSettingsFragment == null) baseSettingsFragment = cachePrefs.getString("baseSettingsFragment", null)?.let { loadClassFlexible(cl, it) }
             if (rootServiceManager == null) rootServiceManager = cachePrefs.getString("rootServiceManager", null)?.let { loadClassFlexible(cl, it) }
+            if (cloudGms == null) cloudGms = cachePrefs.getString("cloudGms", null)?.let { loadClassFlexible(cl, it) }
         }
 
         attempt("load V class fallback", silent = true) {
@@ -163,7 +165,13 @@ object TargetClassResolver {
 
                 if (cloudGms == null) {
                     cloudGms = bridge.findSingle(cl, "cloudGmsClass", filterInner = false) {
-                        matcher { usingStrings("nogms_access_token") }
+                        matcher {
+                            usingStrings("nogms_access_token")
+                            addMethod {
+                                name("invoke")
+                                paramCount(0)
+                            }
+                        }
                     }
                 }
 
@@ -362,6 +370,7 @@ object TargetClassResolver {
                     .putString("settingsDetailFragment", settingsDetailFragment?.name)
                     .putString("baseSettingsFragment", baseSettingsFragment?.name)
                     .putString("rootServiceManager", rootServiceManager?.name)
+                    .putString("cloudGms", cloudGms?.name)
                     .apply()
                 Log.d(Consts.TAG, "Saved resolved hook classes to DexKit disk cache for version $ver")
             }

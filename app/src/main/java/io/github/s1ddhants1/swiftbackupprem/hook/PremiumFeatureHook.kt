@@ -119,7 +119,7 @@ object PremiumFeatureHook : HookHandler {
                 }
             }
             when (m.name) {
-                "getA", "getG", "getVp" -> attempt("hook V getter ${m.name}") {
+                "getA", "getVp" -> attempt("hook V getter ${m.name}") {
                     module.hookTracked(
                         m,
                         idPrefix = "premium-v-${m.name}",

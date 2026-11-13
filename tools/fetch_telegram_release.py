@@ -113,6 +113,8 @@ def main():
     parser.add_argument("--check-only", action="store_true", help="Only check for new releases without updating code")
     parser.add_argument("--update-code", action="store_true", default=True, help="Automatically update DexKit.kt and tests")
     parser.add_argument("--all-unmapped", action="store_true", help="Include historical unmapped releases below current max version")
+    parser.add_argument("--download-all", action="store_true", help="Download all APK releases available on Telegram")
+    parser.add_argument("--output-dir", default=None, help="Directory to save downloaded APKs")
     args = parser.parse_args()
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -133,6 +135,28 @@ def main():
     releases = sorted([r for r in releases if r["version_code"]], key=lambda x: x["version_code"], reverse=True)
     latest = releases[0]
     print(f"[*] Latest channel release: {latest['doc_title']} (versionCode: {latest['version_code']}, URL: {latest['url']})")
+
+    if args.download_all:
+        out_dir = args.output_dir or repo_root
+        os.makedirs(out_dir, exist_ok=True)
+        print(f"[*] Downloading all {len(releases)} available channel releases into {out_dir}...")
+        downloaded = 0
+        for rel in releases:
+            vcode = rel["version_code"]
+            doc_title = rel["doc_title"]
+            target_path = os.path.join(out_dir, f"SwiftBackup_{vcode}.apk")
+            if os.path.exists(target_path):
+                print(f"[+] Already present: {target_path}")
+                downloaded += 1
+                continue
+            print(f"[*] Fetching {doc_title} (message {rel['msg_id']})...")
+            if download_via_telethon(rel["msg_id"], target_path):
+                print(f"[+] Downloaded: {target_path}")
+                downloaded += 1
+            else:
+                print(f"[!] Failed to download {doc_title}")
+        print(f"[*] Finished: {downloaded}/{len(releases)} APKs ready in {out_dir}.")
+        sys.exit(0 if downloaded > 0 else 1)
 
     if args.all_unmapped:
         new_releases = [r for r in releases if r["version_code"] not in mapped_codes]

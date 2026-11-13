@@ -1,0 +1,51 @@
+name: Fetch Swift Backup APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      download_all:
+        description: 'Download all available channel APKs (true/false)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    name: Download APKs from Telegram
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install telethon
+
+      - name: Fetch APKs from Telegram
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_SESSION: ${{ secrets.TG_SESSION }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: |
+          mkdir -p apks
+          python3 tools/fetch_telegram_release.py --download-all --output-dir apks
+
+      - name: List Downloaded APKs
+        run: ls -lh apks/
+
+      - name: Upload APKs Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swiftbackup-channel-apks
+          path: apks/*.apk
+          retention-days: 1

@@ -18,7 +18,8 @@ data class VersionClasses(
     val settingsFragment: String? = null,
     val settingsDetailFragment: String? = null,
     val baseSettingsFragment: String? = null,
-    val rootServiceManager: String? = null
+    val rootServiceManager: String? = null,
+    val cloudGms: String? = null
 )
 
 val versionMap = mapOf(
@@ -360,8 +361,8 @@ val versionMap = mapOf(
         homeViewModel = "defpackage.c64",
         authUser = "defpackage.d45",
         anonUser = "defpackage.b45",
-        oauthHelper = "defpackage.uj",
-        authRequestBuilder = "defpackage.c90",
+        oauthHelper = "defpackage.in5",
+        authRequestBuilder = "defpackage.uj",
         appBackup = "defpackage.hk",
         appMetadataXml = "defpackage.cu",
         firebaseWatcher = "defpackage.gg3",
@@ -372,6 +373,7 @@ val versionMap = mapOf(
         settingsDetailFragment = "org.swiftapps.swiftbackup.settings.a",
         baseSettingsFragment = "defpackage.fm0",
         rootServiceManager = "defpackage.bq6",
+        cloudGms = "defpackage.q02",
     ),
     623 to VersionClasses(
         clientId = "defpackage.gp5",
@@ -402,6 +404,8 @@ val versionMap = mapOf(
         settingsFragment = "defpackage.re7",
         settingsDetailFragment = "org.swiftapps.swiftbackup.settings.a",
         baseSettingsFragment = "defpackage.qm0",
+        rootServiceManager = "defpackage.at6",
+        cloudGms = "defpackage.rk",
     ),
     628 to VersionClasses(
         clientId = "defpackage.jq5",

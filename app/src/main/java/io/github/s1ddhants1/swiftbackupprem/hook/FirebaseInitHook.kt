@@ -2,6 +2,7 @@ package io.github.s1ddhants1.swiftbackupprem.hook
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.preference.PreferenceManager
 import android.util.Log
 import io.github.s1ddhants1.swiftbackupprem.Consts
 import io.github.s1ddhants1.swiftbackupprem.util.PreferencesManager
@@ -20,6 +21,13 @@ object FirebaseInitHook : HookHandler {
     ) {
         val isCustom = prefs.customFirebaseApp && prefs.toConfig().isCompleteFirebaseConfig
 
+        attempt("reset forceBrowserGoogleSignIn flag", silent = true) {
+            val defaultPrefs = @Suppress("DEPRECATION") PreferenceManager.getDefaultSharedPreferences(context)
+            if (defaultPrefs.contains("8475d34h4k")) {
+                defaultPrefs.edit().remove("8475d34h4k").apply()
+            }
+        }
+
         attempt("initialize FirebaseApp") {
             val fbAppClass = classLoader.loadClass("com.google.firebase.FirebaseApp")
             val optClass = classLoader.loadClass("com.google.firebase.FirebaseOptions")
@@ -37,15 +45,20 @@ object FirebaseInitHook : HookHandler {
             Log.d(Consts.TAG, "Initialized FirebaseApp (custom: $isCustom, project: $projectId)")
         }
 
-        if (isCustom) {
-            attempt("hook getGoogleAuthAndroidClientId") {
+        if (isCustom && prefs.clientId.isNotBlank()) {
+            attempt("hook SwiftApp Google Auth Client IDs") {
                 val swiftAppClass = classLoader.loadClass("org.swiftapps.swiftbackup.SwiftApp")
-                module.hookTracked(
-                    swiftAppClass.getDeclaredMethod("getGoogleAuthAndroidClientId"),
-                    idPrefix = "firebase-init-clientid",
-                    priority = PRIORITY_DEFAULT + 10,
-                    deoptimize = true
-                ).intercept { prefs.clientId }
+                for (methodName in listOf("getGoogleAuthAndroidClientId", "getGoogleAuthWebClientId")) {
+                    attempt("hook SwiftApp.$methodName", silent = true) {
+                        val method = swiftAppClass.getDeclaredMethod(methodName)
+                        module.hookTracked(
+                            method,
+                            idPrefix = "firebase-init-$methodName",
+                            priority = PRIORITY_DEFAULT + 10,
+                            deoptimize = true
+                        ).intercept { prefs.clientId }
+                    }
+                }
             }
         }
     }

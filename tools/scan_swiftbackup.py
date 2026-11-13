@@ -24,9 +24,41 @@ def uleb128(data: bytes, off: int):
         shift += 7
     return res, off
 
+def extract_raw_zip_entry(apk_path: str, entry_name: str) -> bytes:
+    """Extracts a raw zip entry directly by offset, bypassing Python 3.14 zip bomb checks."""
+    import zlib
+    with zipfile.ZipFile(apk_path, "r") as z:
+        info = z.getinfo(entry_name)
+    with open(apk_path, "rb") as f:
+        f.seek(info.header_offset)
+        header = f.read(30)
+        _, _, _, method, _, _, _, csize, usize, fn_len, extra_len = struct.unpack("<4sHHHHHIIIHH", header)
+        f.seek(info.header_offset + 30 + fn_len + extra_len)
+        raw = f.read(csize)
+        if method == 0:
+            return raw
+        elif method == 8:
+            return zlib.decompress(raw, -15)
+        raise ValueError(f"Unsupported compression method {method}")
+
+def get_apk_zip(apk_path: str):
+    """Opens APK as ZipFile, transparently unpacking LSPatch origin.apk only if root dex is a stub."""
+    z = zipfile.ZipFile(apk_path, "r")
+    if "assets/lspatch/origin.apk" in z.namelist():
+        info = z.getinfo("classes.dex") if "classes.dex" in z.namelist() else None
+        if info and info.file_size < 50000:
+            try:
+                import io
+                origin_bytes = extract_raw_zip_entry(apk_path, "assets/lspatch/origin.apk")
+                z.close()
+                return zipfile.ZipFile(io.BytesIO(origin_bytes), "r")
+            except Exception:
+                pass
+    return z
+
 def parse_manifest(apk_path: str):
     """Extract versionCode and versionName from AndroidManifest.xml (AXML)."""
-    with zipfile.ZipFile(apk_path, "r") as z:
+    with get_apk_zip(apk_path) as z:
         if "AndroidManifest.xml" not in z.namelist():
             return None, None
         data = z.read("AndroidManifest.xml")
@@ -97,6 +129,8 @@ def scan_apk(apk_path: str):
         "FCW",
         ".info/connected",
         "FireSynchronizer",
+        "Success(snapshot=",
+        "nogms_access_token",
         "Maps with non-string keys are not supported",
         "backup_storage_location",
         "app_backups",
@@ -109,7 +143,7 @@ def scan_apk(apk_path: str):
     class_methods = {}
     class_dex = {}
 
-    with zipfile.ZipFile(apk_path, "r") as z:
+    with get_apk_zip(apk_path) as z:
         dex_files = [n for n in z.namelist() if n.startswith("classes") and n.endswith(".dex")]
         for dex_name in dex_files:
             data = z.read(dex_name)
@@ -260,12 +294,17 @@ def scan_apk(apk_path: str):
             else:
                 res["oauthHelper"] = f"defpackage.{c}" if not "." in c else c
 
-        if ("setup_cloud_first_startup" in s and "KEY_SCHEDULE_ENABLED" in s and "AlarmReceiver" not in c) or \
-           ("checkCloudConnectPromptNeeded=" in s and "AlarmReceiver" not in c):
+        if "setup_cloud_first_startup" in s and "KEY_SCHEDULE_ENABLED" in s and "AlarmReceiver" not in c:
             res["homeViewModel"] = f"defpackage.{c}" if not "." in c else c
 
         if "client ID cannot be null or empty" in s:
             res["authRequestBuilder"] = f"defpackage.{c}" if not "." in c else c
+
+        if "nogms_access_token" in s:
+            mths = class_methods.get(c, [])
+            has_invoke = any(name == "invoke" and len(params) == 0 for flags, name, ret, params in mths)
+            if has_invoke:
+                res["cloudGms"] = f"defpackage.{c}" if not "." in c else c
 
         mths = class_methods.get(c, [])
         for flags, name, ret, params in mths:
@@ -311,7 +350,24 @@ def scan_apk(apk_path: str):
             res["appMetadataXml"] = f"defpackage.{c}" if not "." in c else c
 
         if "com.topjohnwu.superuser.RECEIVER_BROADCAST" in s:
-            res["rootServiceManager"] = f"defpackage.{c}" if not "." in c else c
+            mths = class_methods.get(c, [])
+            has_connect = any(
+                len(params) == 2 and
+                any("ComponentName" in p for p in params) and
+                any("String" in p for p in params)
+                for flags, name, ret, params in mths
+            )
+            if has_connect:
+                res["rootServiceManager"] = f"defpackage.{c}" if not "." in c else c
+            elif "rootServiceManager" not in res:
+                res["rootServiceManager"] = f"defpackage.{c}" if not "." in c else c
+
+    # Fallback for homeViewModel if not yet resolved
+    if "homeViewModel" not in res:
+        for c, s in class_strings.items():
+            if "$" not in c and "checkCloudConnectPromptNeeded=" in s and "AlarmReceiver" not in c:
+                res["homeViewModel"] = f"defpackage.{c}" if not "." in c else c
+                break
 
     # Fallbacks for pre-5.1.0 unflattened classes
     if "org.swiftapps.swiftbackup.home.a" in class_methods and "homeViewModel" not in res:
@@ -331,20 +387,11 @@ def scan_apk(apk_path: str):
                 name_lower = c.lower()
                 if any(bad in name_lower for bad in ("error", "fail", "abort")):
                     continue
-                # Check constructors
-                has_error = False
-                has_snapshot = False
-                for m_flags, m_name, m_ret, m_params in class_methods.get(c, []):
-                    if m_name == "<init>":
-                        if any(any(bad in param for bad in ("Throwable", "Exception", "Error")) for param in m_params):
-                            has_error = True
-                            break
-                        if any("Snapshot" in param for param in m_params):
-                            has_snapshot = True
-                if not has_error:
+                c_strs = class_strings.get(c, set())
+                if "Success(snapshot=" in c_strs:
+                    snapshot_candidates.append(c)
+                else:
                     candidates.append(c)
-                    if has_snapshot:
-                        snapshot_candidates.append(c)
 
         pool = snapshot_candidates if snapshot_candidates else candidates
         selected = None
@@ -369,7 +416,7 @@ def format_kotlin_entry(version_code: int, classes: dict) -> str:
         "authRequestBuilder", "appBackup", "appMetadataXml", "firebaseWatcher",
         "fireSynchronizer", "fireSynchronizerSuccess", "customClassMapper",
         "settingsFragment", "settingsDetailFragment", "baseSettingsFragment",
-        "rootServiceManager"
+        "rootServiceManager", "cloudGms"
     ]
     for k in keys:
         if k in classes and classes[k] is not None:
