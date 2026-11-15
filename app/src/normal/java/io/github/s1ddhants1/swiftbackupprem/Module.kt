@@ -1,5 +1,6 @@
 package io.github.s1ddhants1.swiftbackupprem
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.BroadcastReceiver
@@ -204,6 +205,7 @@ class Module : XposedModule(), HookContext {
         }
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun applyHooks(ctx: Context, cl: ClassLoader, sourceDir: String, swiftAppInstance: Any? = null): Pair<ResolvedTargets, PreferencesManager>? {
         val remotePrefs = attempt("get remote preferences") { getRemotePreferences(Consts.PREFS_SETTINGS) }
         remotePrefs?.registerOnSharedPreferenceChangeListener(forceStopListener)

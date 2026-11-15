@@ -145,7 +145,9 @@ android {
             "SetWorldWritable",
             "SdCardPath",
             "QueryPermissionsNeeded",
-            "UseKtx"
+            "UseKtx",
+            "UnspecifiedRegisterReceiverFlag",
+            "XposedNewApi"
         )
     }
     packaging {
